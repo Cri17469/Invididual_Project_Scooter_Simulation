@@ -1,0 +1,22 @@
+vehicle:
+  mass_kg: 120
+  wheel_radius_m: 0.165
+  CdA_m2: 0.4
+  Cr: 0.012
+
+motor:
+  efficiency: 0.88
+  regen_efficiency: 0.75
+  T_drive_max_Nm: 45
+  T_regen_max_Nm: 25
+
+battery:
+  nominal_voltage_V: 48
+  capacity_Wh: 960
+  charge_power_limit_W: 1200
+  discharge_power_limit_W: 3000
+  initial_soc: 0.9
+
+environment:
+  air_density: 1.2
+  gravity: 9.81

@@ -1,0 +1,6 @@
+name: "urban_stop_and_go"
+description: "A simple urban stop-go drive cycle with traffic lights"
+
+time_s: [0, 10, 20, 30, 40, 50, 60, 80, 100, 120, 140, 160]
+speed_kmh: [0, 15, 25, 25, 20, 10, 0, 0, 25, 25, 10, 0]
+grade_percent: [0, 0, 1, 0, -1, 0, 0, 0, 2, 0, -2, 0]
