@@ -5,7 +5,7 @@ from utils import get_data_dir
 
 def load_drive_cycle(filename: str = "cycle.yaml") -> dict:
     """
-    从 data/ 目录读取 drive cycle。
+    Load drive cycle data from the data/ directory.
     """
     data_dir = get_data_dir()
     file_path = data_dir / filename

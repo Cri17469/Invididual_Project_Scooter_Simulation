@@ -21,7 +21,7 @@ class VehicleParams:
 
 def load_vehicle_params(filename: str = "scooter_params.yaml") -> VehicleParams:
     """
-    从 data/ 目录读取车辆参数。
+    Load vehicle parameters from the data/ directory.
     """
     data_dir = get_data_dir()
     file_path = data_dir / filename
@@ -30,14 +30,14 @@ def load_vehicle_params(filename: str = "scooter_params.yaml") -> VehicleParams:
         with open(file_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except FileNotFoundError:
-        raise FileNotFoundError(f"[错误] 未找到车辆参数文件: {file_path}")
+        raise FileNotFoundError(f"[Error] Vehicle parameters file not found: {file_path}")
     except yaml.YAMLError as e:
-        raise ValueError(f"[错误] 解析 YAML 文件失败: {e}")
+        raise ValueError(f"[Error] Failed to parse YAML file: {e}")
 
     try:
         v, m, b, e = data["vehicle"], data["motor"], data["battery"], data["environment"]
     except KeyError as e:
-        raise KeyError(f"[错误] YAML 文件中缺少字段: {e}")
+        raise KeyError(f"[Error] Missing field in YAML file: {e}")
 
     return VehicleParams(
         mass_kg=v["mass_kg"],

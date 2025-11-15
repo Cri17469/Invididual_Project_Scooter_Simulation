@@ -4,7 +4,12 @@ from vehicle_params import VehicleParams
 
 def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> dict:
     """
-    根据工况与车辆参数计算能耗。
+    Calculate energy usage including:
+    - battery power
+    - regenerative braking energy
+    - peak regen power
+    - SoC trace and final SoC
+    - plot with highlighted regen region
     """
     try:
         t, v, theta = cycle["t"], cycle["v"], cycle["theta"]
@@ -14,38 +19,111 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
     dt = np.diff(t, prepend=t[0])
     a = np.gradient(v, t)
 
-    # Forces
+    # ==========================
+    # 1. Forces
+    # ==========================
     F_inert = params.mass_kg * a
     F_grade = params.mass_kg * params.g * np.sin(theta)
     F_roll  = params.Cr * params.mass_kg * params.g * np.cos(theta)
     F_aero  = 0.5 * params.rho_air * params.CdA_m2 * v**2
     F_trac  = F_inert + F_grade + F_roll + F_aero
 
-    # Power
+    # ==========================
+    # 2. Wheel power
+    # ==========================
     P_wheel = F_trac * v
-    P_bat = np.where(P_wheel > 0,
-                     P_wheel / params.eta_m,
-                     params.eta_regen * P_wheel)
+
+    # ==========================
+    # 3. Battery power (includes regen)
+    # ==========================
+    P_bat = np.where(
+        P_wheel > 0,
+        P_wheel / params.eta_m,
+        params.eta_regen * P_wheel
+    )
+
+    # limit regen power
     P_bat = np.maximum(P_bat, -params.Pchg_max)
 
-    E_Wh = np.trapezoid(P_bat, t) / 3600
-    dist_km = np.trapezoid(v, t) / 1000
-    Wh_per_km = E_Wh / max(dist_km, 1e-6)
+    # ==========================
+    # 4. Integrate battery energy
+    # ==========================
+    E_Wh = np.trapezoid(P_bat, t) / 3600.0
+    dist_km = np.trapezoid(v, t) / 1000.0
+    Wh_per_km = E_Wh / max(dist_km, 1e-9)
 
+    # ==========================
+    # 5. Regenerative braking energy
+    # ==========================
+    P_regen = np.where(P_bat < 0, -P_bat, 0.0)  # convert negative to positive
+    E_regen_Wh = np.trapezoid(P_regen, t) / 3600.0
+
+    # regen fraction = recovered brake energy / wheel braking energy
+    P_wheel_brake = np.where(P_wheel < 0, -P_wheel, 0.0)
+    braking_energy_raw = np.trapezoid(P_wheel_brake, t) / 3600.0
+    regen_fraction = E_regen_Wh / max(braking_energy_raw, 1e-9)
+
+    # ==========================
+    # 6. Peak regenerative braking power
+    # ==========================
+    regen_peak_power_W = np.max(P_regen)  # already positive
+
+    # ==========================
+    # 7. Battery SoC simulation
+    # ==========================
+    SoC = np.zeros_like(t)
+    SoC[0] = params.soc0
+
+    for i in range(1, len(t)):
+        # dE = P_bat * dt   → convert J to Wh → SoC change
+        dWh = P_bat[i] * dt[i] / 3600.0
+        SoC[i] = SoC[i-1] - dWh / params.Cap_Wh
+
+    final_soc = SoC[-1]
+
+    # ==========================
+    # 8. Plot
+    # ==========================
     if plot:
-        plt.figure(figsize=(7,5))
-        plt.subplot(2,1,1)
+        plt.figure(figsize=(8,7))
+
+        # Speed
+        plt.subplot(3,1,1)
         plt.plot(t, v*3.6)
         plt.ylabel("Speed (km/h)")
-        plt.subplot(2,1,2)
-        plt.plot(t, P_bat/1000)
-        plt.ylabel("Battery Power (kW)")
+
+        # Wheel Power
+        plt.subplot(3,1,2)
+        plt.plot(t, P_wheel/1000, label="Wheel Power")
+        plt.ylabel("P_wheel (kW)")
+
+        # Battery power with regen highlighted
+        plt.subplot(3,1,3)
+        plt.plot(t, P_bat/1000, label="Battery Power", color='blue')
+
+        # Highlight regen region (P_bat < 0)
+        regen_mask = P_bat < 0
+        plt.fill_between(t, P_bat/1000, 0,
+                         where=regen_mask,
+                         color='red', alpha=0.4,
+                         label="Regenerative Region")
+
+        plt.ylabel("P_bat (kW)")
         plt.xlabel("Time (s)")
+        plt.legend()
         plt.tight_layout()
         plt.show()
 
+    # ==========================
+    # 9. Return all metrics
+    # ==========================
     return {
         "E_Wh": E_Wh,
         "distance_km": dist_km,
-        "Wh_per_km": Wh_per_km
+        "Wh_per_km": Wh_per_km,
+        "E_regen_Wh": E_regen_Wh,
+        "regen_fraction": regen_fraction,
+        "regen_peak_power_W": regen_peak_power_W, 
+        "SoC_trace": SoC.tolist(),                  
+        "final_SoC": final_soc                      
     }

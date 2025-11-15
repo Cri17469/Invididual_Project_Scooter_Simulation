@@ -2,15 +2,15 @@ from pathlib import Path
 
 def get_data_dir() -> Path:
     """
-    自动解析 data 目录（与 src 同级）。
+    Automatically resolve the data directory (at the same level as src).
     """
     try:
-        # src 的上级路径就是项目根目录
+        # The parent of src is the project root directory
         project_root = Path(__file__).resolve().parent.parent
         data_dir = project_root / "data"
         if not data_dir.exists():
-            raise FileNotFoundError(f"未找到 data 文件夹: {data_dir}")
+            raise FileNotFoundError(f"Data folder not found: {data_dir}")
         return data_dir
     except Exception as e:
-        print(f"[错误] 无法解析 data 路径: {e}")
+        print(f"[Error] Unable to resolve data path: {e}")
         raise
