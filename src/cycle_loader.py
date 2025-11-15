@@ -14,9 +14,9 @@ def load_drive_cycle(filename: str = "cycle.yaml") -> dict:
         with open(file_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except FileNotFoundError:
-        raise FileNotFoundError(f"[错误] 未找到行驶工况文件: {file_path}")
+        raise FileNotFoundError(f"[ERROR] cycle data is not found: {file_path}")
     except yaml.YAMLError as e:
-        raise ValueError(f"[错误] 解析 YAML 文件失败: {e}")
+        raise ValueError(f"[ERROR] failed analyzing YAML: {e}")
 
     try:
         t = np.array(data["time_s"], dtype=float)
@@ -24,7 +24,7 @@ def load_drive_cycle(filename: str = "cycle.yaml") -> dict:
         grades = data.get("grade_percent", [0.0] * len(t))
         theta = np.arctan(np.array(grades, dtype=float) / 100.0)
     except KeyError as e:
-        raise KeyError(f"[错误] 缺少关键字段: {e}")
+        raise KeyError(f"[ERROR] MISSING significant data: {e}")
 
     return {
         "name": data.get("name", "cycle"),

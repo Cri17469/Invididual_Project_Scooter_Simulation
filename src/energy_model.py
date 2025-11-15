@@ -9,7 +9,7 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
     try:
         t, v, theta = cycle["t"], cycle["v"], cycle["theta"]
     except KeyError:
-        raise KeyError("[错误] cycle 数据缺少 t/v/theta")
+        raise KeyError("[ERROR] cycle data MISSING t/v/theta")
 
     dt = np.diff(t, prepend=t[0])
     a = np.gradient(v, t)
@@ -28,8 +28,8 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
                      params.eta_regen * P_wheel)
     P_bat = np.maximum(P_bat, -params.Pchg_max)
 
-    E_Wh = np.trapz(P_bat, t) / 3600
-    dist_km = np.trapz(v, t) / 1000
+    E_Wh = np.trapezoid(P_bat, t) / 3600
+    dist_km = np.trapezoid(v, t) / 1000
     Wh_per_km = E_Wh / max(dist_km, 1e-6)
 
     if plot:
