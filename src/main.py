@@ -2,6 +2,7 @@ from cycle_loader import load_drive_cycle
 from vehicle_params import load_vehicle_params
 from energy_model import simulate_energy
 
+
 def main():
     try:
         cycle = load_drive_cycle("cycle.yaml")
@@ -15,6 +16,7 @@ def main():
 
     except Exception as e:
         print(f"[Fatal error] Simulation failed: {e}")
+
 
 if __name__ == "__main__":
     main()

@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from vehicle_params import VehicleParams
 
+
 def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> dict:
     """
     Calculate energy usage including:
@@ -24,9 +25,9 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
     # ==========================
     F_inert = params.mass_kg * a
     F_grade = params.mass_kg * params.g * np.sin(theta)
-    F_roll  = params.Cr * params.mass_kg * params.g * np.cos(theta)
-    F_aero  = 0.5 * params.rho_air * params.CdA_m2 * v**2
-    F_trac  = F_inert + F_grade + F_roll + F_aero
+    F_roll = params.Cr * params.mass_kg * params.g * np.cos(theta)
+    F_aero = 0.5 * params.rho_air * params.CdA_m2 * v**2
+    F_trac = F_inert + F_grade + F_roll + F_aero
 
     # ==========================
     # 2. Wheel power
@@ -85,20 +86,20 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
     # 8. Plot
     # ==========================
     if plot:
-        plt.figure(figsize=(8,7))
+        plt.figure(figsize=(8, 7))
 
         # Speed
-        plt.subplot(3,1,1)
+        plt.subplot(3, 1, 1)
         plt.plot(t, v*3.6)
         plt.ylabel("Speed (km/h)")
 
         # Wheel Power
-        plt.subplot(3,1,2)
+        plt.subplot(3, 1, 2)
         plt.plot(t, P_wheel/1000, label="Wheel Power")
         plt.ylabel("P_wheel (kW)")
 
         # Battery power with regen highlighted
-        plt.subplot(3,1,3)
+        plt.subplot(3, 1, 3)
         plt.plot(t, P_bat/1000, label="Battery Power", color='blue')
 
         # Highlight regen region (P_bat < 0)
@@ -123,7 +124,7 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
         "Wh_per_km": Wh_per_km,
         "E_regen_Wh": E_regen_Wh,
         "regen_fraction": regen_fraction,
-        "regen_peak_power_W": regen_peak_power_W, 
-        "SoC_trace": SoC.tolist(),                  
-        "final_SoC": final_soc                      
+        "regen_peak_power_W": regen_peak_power_W,
+        "SoC_trace": SoC.tolist(),
+        "final_SoC": final_soc
     }

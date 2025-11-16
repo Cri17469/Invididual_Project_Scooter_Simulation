@@ -3,6 +3,7 @@ import numpy as np
 from pathlib import Path
 from utils import get_data_dir
 
+
 def load_drive_cycle(filename: str = "cycle.yaml") -> dict:
     """
     Load drive cycle data from the data/ directory.
@@ -14,7 +15,8 @@ def load_drive_cycle(filename: str = "cycle.yaml") -> dict:
         with open(file_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except FileNotFoundError:
-        raise FileNotFoundError(f"[ERROR] cycle data is not found: {file_path}")
+        raise FileNotFoundError(
+            f"[ERROR] cycle data is not found: {file_path}")
     except yaml.YAMLError as e:
         raise ValueError(f"[ERROR] failed analyzing YAML: {e}")
 

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 def get_data_dir() -> Path:
     """
     Automatically resolve the data directory (at the same level as src).

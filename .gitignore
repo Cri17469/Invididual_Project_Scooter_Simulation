@@ -32,3 +32,6 @@ build/
 
 # Data files
 data/cycle.yaml
+
+# Cache files
+cache/*

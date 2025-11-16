@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from utils import get_data_dir
 
+
 @dataclass
 class VehicleParams:
     mass_kg: float
@@ -19,6 +20,7 @@ class VehicleParams:
     g: float
     soc0: float
 
+
 def load_vehicle_params(filename: str = "scooter_params.yaml") -> VehicleParams:
     """
     Load vehicle parameters from the data/ directory.
@@ -30,7 +32,8 @@ def load_vehicle_params(filename: str = "scooter_params.yaml") -> VehicleParams:
         with open(file_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except FileNotFoundError:
-        raise FileNotFoundError(f"[Error] Vehicle parameters file not found: {file_path}")
+        raise FileNotFoundError(
+            f"[Error] Vehicle parameters file not found: {file_path}")
     except yaml.YAMLError as e:
         raise ValueError(f"[Error] Failed to parse YAML file: {e}")
 
