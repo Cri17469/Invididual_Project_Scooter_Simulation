@@ -1,56 +1,79 @@
-import os
-import time
-import requests
 import numpy as np
 import yaml
-import osmnx as ox
+import requests
+import time
 import openrouteservice as ors
 from pathlib import Path
 
-# ==========================================================
-# 1. Fetch OSM route using OpenRouteService
-# ==========================================================
 
+# ==============================================================
+# 1. Get real OSM route using OpenRouteService
+# ==============================================================
 
-def fetch_osm_route(start, end, api_key):
+def fetch_osm_route(start, end, api_key, profile="driving-car"):
     """
-    start/end = (lat, lon)
-    returns coordinates list with many points
+    Fetch real-world route between two coordinates (lat, lon).
+    Returns:
+        lat_list, lon_list, full_route_json
     """
     client = ors.Client(key=api_key)
 
     route = client.directions(
         coordinates=[(start[1], start[0]), (end[1], end[0])],
-        profile='driving-car',
-        format='geojson'
+        profile=profile,
+        format="geojson",
+        instructions="true"
     )
 
     coords = route['features'][0]['geometry']['coordinates']
-    # coords are [lon,lat]
     lat = [c[1] for c in coords]
     lon = [c[0] for c in coords]
 
-    return lat, lon
+    return lat, lon, route
 
 
-# ==========================================================
-# 2. Elevation using OSMnx + SRTM
-# ==========================================================
+# ==============================================================
+# 2. Extract road names from ORS route JSON
+# ==============================================================
+
+def extract_road_names(route_json):
+    names = []
+
+    segments = route_json['features'][0]['properties']['segments']
+    for seg in segments:
+        for step in seg["steps"]:
+            nm = step.get("name", "").strip()
+            if nm and nm not in names:
+                names.append(nm)
+
+    return names
+
+
+def extract_segment_lengths(route_json):
+    """
+    Returns list of segment lengths in meters
+    """
+    lengths = []
+    segments = route_json['features'][0]['properties']['segments']
+
+    for seg in segments:
+        for step in seg['steps']:
+            lengths.append(step.get("distance", 0.0))
+
+    return lengths
+
+
+# ==============================================================
+# 3. Elevation using OpenElevation API (free)
+# ==============================================================
 
 def get_elevation_profile(lat, lon, chunk_size=80):
-    """
-    Use Open-Elevation (free) to fetch elevation for a list of coordinates.
-    Returns elevation array (meters).
-    """
-
     elevation = []
-
     coords = list(zip(lat, lon))
 
     for i in range(0, len(coords), chunk_size):
         chunk = coords[i:i+chunk_size]
 
-        # format: lat,lon|lat,lon|...
         locations = "|".join([f"{c[0]},{c[1]}" for c in chunk])
         url = f"https://api.open-elevation.com/api/v1/lookup?locations={locations}"
 
@@ -58,175 +81,177 @@ def get_elevation_profile(lat, lon, chunk_size=80):
             r = requests.get(url)
             data = r.json()
 
-            for result in data["results"]:
-                elevation.append(result["elevation"])
+            for res in data["results"]:
+                elevation.append(res["elevation"])
 
         except Exception as e:
-            print(f"[WARNING] Elevation chunk failed: {e}. Using 0m.")
-            elevation.extend([0]*len(chunk))
+            print(f"[WARNING] elevation chunk failed: {e}")
+            elevation.extend([0] * len(chunk))
 
         time.sleep(0.2)  # avoid rate limit
 
     return np.array(elevation)
 
-# ==========================================================
-# 3. Generate speed profile based on real road maxspeed
-# ==========================================================
 
-
-def generate_speed_profile(lat, lon):
-    """
-    Converts OSM route geometry into a London-like speed pattern.
-    - Base speed from OSM maxspeed (if available)
-    - Add London behavior: congestion, slowdowns, signals
-    """
-    # Load driving graph around route
-    G = ox.graph_from_point((lat[0], lon[0]), dist=2000, network_type='drive')
-
-    # ⭐ Project graph to UTM (no sklearn required)
-    G = ox.project_graph(G)
-
-    speed = []
-
-    for i in range(len(lat) - 1):
-        try:
-            # nearest nodes in projected graph
-            u = ox.distance.nearest_nodes(G, lon[i], lat[i])
-            v = ox.distance.nearest_nodes(G, lon[i+1], lat[i+1])
-
-            # get maxspeed attribute
-            maxspeed = G[u][v][0].get("maxspeed")
-            if isinstance(maxspeed, list):
-                ms = int(maxspeed[0])
-            else:
-                ms = int(maxspeed) if maxspeed else 30
-
-        except Exception:
-            ms = 30  # default fallback
-
-        # London typical speeds (maxspeed rarely reached)
-        base_speed = np.clip(np.random.normal(ms * 0.6, 4), 5, ms)
-        speed.append(base_speed)
-
-    speed.append(speed[-1])
-    return np.array(speed)
-
-
-# ==========================================================
-# 4. Convert elevation to grade (%)
-# ==========================================================
+# ==============================================================
+# 4. Compute grade (%) from elevation
+# ==============================================================
 
 def compute_grade(elevation, lat, lon):
     grade = [0]
 
     for i in range(1, len(elevation)):
-        dx = ox.distance.great_circle(
-            lat[i-1], lon[i-1], lat[i], lon[i])  # meters
+        # haversine distance
+        lat1, lon1 = np.radians([lat[i-1], lon[i-1]])
+        lat2, lon2 = np.radians([lat[i], lon[i]])
+
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+
+        a = (np.sin(dlat/2))**2 + np.cos(lat1) * np.cos(lat2) * (np.sin(dlon/2))**2
+        c = 2 * np.arcsin(np.sqrt(a))
+        dx = 6371000 * c  # meters
+
         dh = elevation[i] - elevation[i-1]
-        g = (dh / dx) * 100 if dx > 1 else 0
-        grade.append(np.clip(g, -6, 6))
+
+        g = (dh / dx * 100) if dx > 0 else 0
+        g = np.clip(g, -6, 6)
+
+        grade.append(g)
 
     return np.array(grade)
 
 
-# ==========================================================
-# 5. Add urban factors: lights, bus stops, random events
-# ==========================================================
+# ==============================================================
+# 5. Generate London-style speed profile
+# ==============================================================
 
-def apply_urban_disruptions(speed):
-    n = len(speed)
+def generate_speed_profile(lat, lon):
+    """
+    London-style base speed: 10–35 km/h waves + random variability.
+    """
+    n = len(lat)
+
+    base = []
+    for i in range(n):
+        cyc = (np.sin(2*np.pi*i/n*4) + 1) / 2
+        spd = 12 + cyc * 23  # 12–35 km/h typical
+        base.append(spd)
+
+    return np.array(base)
+
+
+# ==============================================================
+# 6. Apply city traffic behavior
+# ==============================================================
+
+def apply_urban_events(speed):
     speed = speed.copy()
+    n = len(speed)
 
     # Traffic lights
     for i in range(n):
-        if np.random.random() < 0.005:
-            dur = np.random.randint(3, 12)
+        if np.random.rand() < 0.005:
+            dur = np.random.randint(5, 12)
             for j in range(i, min(i+dur, n)):
                 speed[j] = 0
 
-    # Bus blocking
+    # Bus/taxi blocking
     for i in range(n):
-        if np.random.random() < 0.003:
-            drop = np.random.randint(10, 20)
+        if np.random.rand() < 0.003:
+            drop = np.random.randint(8, 18)
             for j in range(i, min(i+8, n)):
                 speed[j] = max(0, speed[j] - drop)
 
-    # Random pedestrian stop
+    # Pedestrian crossing
     for i in range(n):
-        if np.random.random() < 0.002:
-            dur = np.random.randint(5, 10)
+        if np.random.rand() < 0.002:
+            dur = np.random.randint(3, 7)
             for j in range(i, min(i+dur, n)):
                 speed[j] = 0
 
-    # Noise (natural variability)
-    noise = np.random.normal(0, 2, n)
+    # Add natural noise
+    noise = np.random.normal(0, 2.0, n)
     speed = np.clip(speed + noise, 0, 45)
 
     return speed
 
 
-# ==========================================================
-# 6. Save cycle as YAML
-# ==========================================================
+# ==============================================================
+# 7. Save as cycle.yaml
+# ==============================================================
 
-def save_cycle_yaml(name, description, t, speed, grade, filename="cycle.yaml"):
-    # Create data directory if it doesn't exist
-    data_dir = Path(__file__).parent.parent / "data"
-    data_dir.mkdir(exist_ok=True)
-
-    filepath = data_dir / filename
-
+def save_cycle_yaml(filename, t, speed, grade, road_names, segment_lengths, lat, lon, route_json):
     data = {
-        "name": name,
-        "description": description,
+        "name": "london_osm_urban",
+        "description": "OSM-based London route with traffic lights, congestion, elevation, and road metadata.",
         "time_s": t.tolist(),
         "speed_kmh": speed.tolist(),
-        "grade_percent": grade.tolist()
+        "grade_percent": grade.tolist(),
+
+        # Extra metadata (ignored by loader)
+        "road_names": road_names,
+        "segment_lengths_m": segment_lengths,
+        "route_coords": {
+            "lat": lat,
+            "lon": lon
+        },
+        "osm_summary": {
+            "distance_m": route_json['features'][0]['properties']['summary']['distance'],
+            "duration_s": route_json['features'][0]['properties']['summary']['duration'],
+            "routing_profile": "driving-car"
+        }
     }
 
-    with open(filepath, "w", encoding="utf-8") as f:
+    with open(filename, "w", encoding="utf-8") as f:
         yaml.dump(data, f, allow_unicode=True)
 
-    print(f"Saved to {filepath}")
+    print(f"Saved realistic London cycle → {filename}")
 
 
-# ==========================================================
-# Main Logic
-# ==========================================================
+# ==============================================================
+# Main Entry
+# ==============================================================
 
 def generate_london_osm_cycle():
-    # EXAMPLE: UCL → Waterloo Station
+    # Example route: UCL → Waterloo
     start = (51.5246, -0.1340)  # UCL
-    end = (51.5033, -0.1133)  # Waterloo Station
+    end   = (51.5033, -0.1133)  # Waterloo Station
 
-    API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImMxOTJlZTZmOGM2OTRhNjc4MWVlYmFlODVkNWMwNmFkIiwiaCI6Im11cm11cjY0In0="
+    # TODO: replace with your real API key
+    ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImMxOTJlZTZmOGM2OTRhNjc4MWVlYmFlODVkNWMwNmFkIiwiaCI6Im11cm11cjY0In0="
 
-    # 1. OSM route
-    lat, lon = fetch_osm_route(start, end, API_KEY)
+    # 1. Get OSM route + geometry
+    lat, lon, route_json = fetch_osm_route(start, end, ORS_API_KEY)
 
-    # 2. elevation
+    # 2. Extract metadata
+    road_names = extract_road_names(route_json)
+    segment_lengths = extract_segment_lengths(route_json)
+
+    # 3. Elevation
     elevation = get_elevation_profile(lat, lon)
 
-    # 3. speed profile base
-    speed = generate_speed_profile(lat, lon)
-
-    # 4. grade
+    # 4. Grade (%)
     grade = compute_grade(elevation, lat, lon)
 
-    # 5. add urban events
-    speed = apply_urban_disruptions(speed)
+    # 5. Speed profile
+    speed = generate_speed_profile(lat, lon)
+    speed = apply_urban_events(speed)
 
-    # 6. time
+    # 6. Convert to drive cycle time (10s interval)
     t = np.arange(0, len(speed)*10, 10)
 
-    # 7. save
+    # 7. Save cycle YAML
     save_cycle_yaml(
-        name="london_osm_urban",
-        description="Real OSM London cycle with elevation + traffic behaviors",
+        filename=str(Path(__file__).parent.parent / "data" / "cycle.yaml"),
         t=t,
         speed=speed,
         grade=grade,
-        filename="cycle.yaml"
+        road_names=road_names,
+        segment_lengths=segment_lengths,
+        lat=lat,
+        lon=lon,
+        route_json=route_json
     )
 
 
