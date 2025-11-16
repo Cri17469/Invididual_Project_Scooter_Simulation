@@ -29,3 +29,6 @@ build/
 # Environment variables
 .env
 .env.local
+
+# Data files
+data/cycle.yaml
