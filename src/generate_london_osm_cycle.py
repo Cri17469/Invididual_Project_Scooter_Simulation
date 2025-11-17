@@ -227,32 +227,48 @@ def apply_urban_events(speed):
 # 7. Save as cycle.yaml
 # ==============================================================
 
-def save_cycle_yaml(filename, t, speed, grade, road_names, segment_lengths, lat, lon, route_json):
-    data = {
-        "name": "london_osm_urban",
-        "description": "OSM-based London route with traffic lights, congestion, elevation, and road metadata.",
-        "time_s": t.tolist(),
-        "speed_kmh": speed.tolist(),
-        "grade_percent": grade.tolist(),
+def save_cycle_yaml(cycles):
+    """Persist one or more cycle definitions to disk.
 
-        # Extra metadata (ignored by loader)
-        "road_names": road_names,
-        "segment_lengths_m": segment_lengths,
-        "route_coords": {
-            "lat": lat,
-            "lon": lon
-        },
-        "osm_summary": {
-            "distance_m": route_json['features'][0]['properties']['summary']['distance'],
-            "duration_s": route_json['features'][0]['properties']['summary']['duration'],
-            "routing_profile": "driving-car"
+    Parameters
+    ----------
+    cycles : Iterable[dict]
+        Each dictionary must define at least the keys `filename`, `t`,
+        `speed`, `grade`, `road_names`, `segment_lengths`, `lat`, `lon`,
+        and `route_json`. Optional metadata such as `name`, `description`,
+        and `routing_profile` can also be supplied per cycle.
+    """
+
+    for cycle in cycles:
+        filename = cycle["filename"]
+        name = cycle.get("name", "cycle")
+        description = cycle.get("description", "Generated drive cycle")
+        routing_profile = cycle.get("routing_profile", "driving-car")
+
+        data = {
+            "name": name,
+            "description": description,
+            "time_s": cycle["t"].tolist(),
+            "speed_kmh": cycle["speed"].tolist(),
+            "grade_percent": cycle["grade"].tolist(),
+            # Extra metadata (ignored by loader)
+            "road_names": cycle["road_names"],
+            "segment_lengths_m": cycle["segment_lengths"],
+            "route_coords": {
+                "lat": cycle["lat"],
+                "lon": cycle["lon"],
+            },
+            "osm_summary": {
+                "distance_m": cycle["route_json"]["features"][0]["properties"]["summary"]["distance"],
+                "duration_s": cycle["route_json"]["features"][0]["properties"]["summary"]["duration"],
+                "routing_profile": routing_profile,
+            },
         }
-    }
 
-    with open(filename, "w", encoding="utf-8") as f:
-        yaml.dump(data, f, allow_unicode=True)
+        with open(filename, "w", encoding="utf-8") as f:
+            yaml.dump(data, f, allow_unicode=True)
 
-    print(f"Saved realistic London cycle → {filename}")
+        print(f"Saved realistic London cycle → {filename}")
 
 
 # ==============================================================
@@ -286,18 +302,23 @@ def generate_london_osm_cycle(api_key: str | None = None):
     # 6. Convert to drive cycle time (10s interval)
     t = np.arange(0, len(speed)*10, 10)
 
-    # 7. Save cycle YAML
-    save_cycle_yaml(
-        filename=str(Path(__file__).parent.parent / "data" / "cycle.yaml"),
-        t=t,
-        speed=speed,
-        grade=grade,
-        road_names=road_names,
-        segment_lengths=segment_lengths,
-        lat=lat,
-        lon=lon,
-        route_json=route_json
-    )
+    # 7. Save cycle YAML (pass as list to allow multiple future cycles)
+    save_cycle_yaml([
+        {
+            "filename": str(Path(__file__).parent.parent / "data" / "cycle.yaml"),
+            "name": "london_osm_urban",
+            "description": "OSM-based London route with traffic lights, congestion, elevation, and road metadata.",
+            "t": t,
+            "speed": speed,
+            "grade": grade,
+            "road_names": road_names,
+            "segment_lengths": segment_lengths,
+            "lat": lat,
+            "lon": lon,
+            "route_json": route_json,
+            "routing_profile": "driving-car",
+        }
+    ])
 
 
 if __name__ == "__main__":
