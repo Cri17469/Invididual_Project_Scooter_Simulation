@@ -1,14 +1,60 @@
+import os
+from pathlib import Path
+
 import numpy as np
 import yaml
 import requests
 import time
 import openrouteservice as ors
-from pathlib import Path
 
 
 # ==============================================================
 # 1. Get real OSM route using OpenRouteService
 # ==============================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _read_api_key_from_env_file(var_name: str, env_filename: str = ".env"):
+    """Return the first matching key from a simple KEY=VALUE .env style file."""
+    env_path = PROJECT_ROOT / env_filename
+    if not env_path.exists():
+        return None
+
+    try:
+        with open(env_path, "r", encoding="utf-8") as env_file:
+            for raw_line in env_file:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                name, value = line.split("=", 1)
+                if name.strip() == var_name:
+                    return value.strip().strip('"').strip("'")
+    except OSError:
+        # Fallback to default behavior – this helper is best-effort only.
+        return None
+
+    return None
+
+
+def resolve_ors_api_key(explicit_key: str | None = None) -> str:
+    """Resolve the OpenRouteService API key from the caller/env/.env file."""
+    if explicit_key:
+        return explicit_key
+
+    api_key = os.getenv("ORS_API_KEY")
+    if not api_key:
+        api_key = _read_api_key_from_env_file("ORS_API_KEY")
+
+    if not api_key:
+        raise EnvironmentError(
+            "Missing OpenRouteService API key. Set ORS_API_KEY in the environment or .env file."
+        )
+
+    return api_key
+
 
 def fetch_osm_route(start, end, api_key, profile="driving-car"):
     """
@@ -213,13 +259,12 @@ def save_cycle_yaml(filename, t, speed, grade, road_names, segment_lengths, lat,
 # Main Entry
 # ==============================================================
 
-def generate_london_osm_cycle():
+def generate_london_osm_cycle(api_key: str | None = None):
     # Example route: UCL → Waterloo
     start = (51.5246, -0.1340)  # UCL
     end   = (51.5033, -0.1133)  # Waterloo Station
 
-    # TODO: replace with your real API key
-    ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImMxOTJlZTZmOGM2OTRhNjc4MWVlYmFlODVkNWMwNmFkIiwiaCI6Im11cm11cjY0In0="
+    ORS_API_KEY = resolve_ors_api_key(api_key)
 
     # 1. Get OSM route + geometry
     lat, lon, route_json = fetch_osm_route(start, end, ORS_API_KEY)

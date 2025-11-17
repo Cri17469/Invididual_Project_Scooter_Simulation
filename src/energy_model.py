@@ -46,6 +46,9 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
     # limit regen power
     P_bat = np.maximum(P_bat, -params.Pchg_max)
 
+    # limit discharge power
+    P_bat = np.minimum(P_bat, params.Pdis_max)
+
     # ==========================
     # 4. Integrate battery energy
     # ==========================
@@ -78,7 +81,7 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
     for i in range(1, len(t)):
         # dE = P_bat * dt   → convert J to Wh → SoC change
         dWh = P_bat[i] * dt[i] / 3600.0
-        SoC[i] = SoC[i-1] - dWh / params.Cap_Wh
+        SoC[i] = np.clip(SoC[i-1] - dWh / params.Cap_Wh, 0.0, 1.0)
 
     final_soc = SoC[-1]
 
