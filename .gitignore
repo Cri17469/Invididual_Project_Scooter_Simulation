@@ -32,6 +32,7 @@ build/
 
 # Data files
 data/cycle.yaml
+data/cycle_canary_to_ucl.yaml
 
 # Cache files
 cache/*

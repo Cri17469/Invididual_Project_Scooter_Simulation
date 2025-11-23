@@ -319,7 +319,66 @@ def generate_london_osm_cycle(api_key: str | None = None):
             "routing_profile": "driving-car",
         }
     ])
-
+    
+    # 8. Save cycle YAML for another cycle (Canary Wharf → UCL)
+    start2 = (51.5033, -0.0195)  # Canary Wharf
+    end2 = (51.5246, -0.1340)    # UCL
+    
+    lat2, lon2, route_json2 = fetch_osm_route(start2, end2, ORS_API_KEY)
+    road_names2 = extract_road_names(route_json2)
+    segment_lengths2 = extract_segment_lengths(route_json2)
+    elevation2 = get_elevation_profile(lat2, lon2)
+    grade2 = compute_grade(elevation2, lat2, lon2)
+    speed2 = generate_speed_profile(lat2, lon2)
+    speed2 = apply_urban_events(speed2)
+    t2 = np.arange(0, len(speed2)*10, 10)
+    
+    save_cycle_yaml([
+        {
+            "filename": str(Path(__file__).parent.parent / "data" / "cycle_canary_to_ucl.yaml"),
+            "name": "london_osm_canary_to_ucl",
+            "description": "OSM-based London route from Canary Wharf to UCL with traffic lights, congestion, elevation, and road metadata.",
+            "t": t2,
+            "speed": speed2,
+            "grade": grade2,
+            "road_names": road_names2,
+            "segment_lengths": segment_lengths2,
+            "lat": lat2,
+            "lon": lon2,
+            "route_json": route_json2,
+            "routing_profile": "driving-car",
+        }
+    ])
+    
+    # 8. Save Cambridge cycle YAML
+    start3 = (52.2061, 0.1333)  # Canary Wharf
+    end3 = (51.5003, 0.0187)    # UCL
+    
+    lat3, lon3, route_json3 = fetch_osm_route(start3, end3, ORS_API_KEY)
+    road_names3 = extract_road_names(route_json3)
+    segment_lengths3 = extract_segment_lengths(route_json3)
+    elevation3 = get_elevation_profile(lat3, lon3)
+    grade3 = compute_grade(elevation3, lat3, lon3)
+    speed3 = generate_speed_profile(lat3, lon3)
+    speed3 = apply_urban_events(speed3)
+    t3 = np.arange(0, len(speed3)*10, 10)
+    
+    save_cycle_yaml([
+        {
+            "filename": str(Path(__file__).parent.parent / "data" / "cambridge.yaml"),
+            "name": "cambridge_osm_urban",
+            "description": "OSM-based Cambridge route.",
+            "t": t3,
+            "speed": speed3,
+            "grade": grade3,
+            "road_names": road_names3,
+            "segment_lengths": segment_lengths3,
+            "lat": lat3,
+            "lon": lon3,
+            "route_json": route_json3,
+            "routing_profile": "driving-car",
+        }
+    ])
 
 if __name__ == "__main__":
     generate_london_osm_cycle()

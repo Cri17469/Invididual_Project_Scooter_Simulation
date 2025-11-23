@@ -5,7 +5,7 @@ from energy_model import simulate_energy
 
 def main():
     try:
-        cycle = load_drive_cycle("cycle.yaml")
+        cycle = load_drive_cycle("cambridge.yaml")
         params = load_vehicle_params("scooter_params.yaml")
         result = simulate_energy(cycle, params, plot=True)
 
