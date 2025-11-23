@@ -197,9 +197,11 @@ def compute_traffic_scaling(route_json, lat, lon, tomtom_api_key: str):
             )
 
             if ratio is None:
-                ratio = 1.0
+                ratio = 0.5  # neutral-but-congested fallback
 
             ratio = float(np.clip(ratio, 0.2, 1.2))
+            ratio = 0.3 + (ratio - 0.2) / (1.2 - 0.2) * (0.7 - 0.3)
+            ratio = float(np.clip(ratio, 0.3, 0.7))
             scaling[start_idx:end_idx + 1] = ratio
 
             steps_metadata.append({
@@ -213,6 +215,36 @@ def compute_traffic_scaling(route_json, lat, lon, tomtom_api_key: str):
             })
 
     return scaling, steps_metadata
+
+
+def _compute_segment_distances(lat: list[float], lon: list[float]) -> np.ndarray:
+    """Return per-point cumulative distances (meters) along the route."""
+
+    lat_rad = np.radians(np.array(lat))
+    lon_rad = np.radians(np.array(lon))
+
+    dlat = np.diff(lat_rad, prepend=lat_rad[0])
+    dlon = np.diff(lon_rad, prepend=lon_rad[0])
+
+    a = (np.sin(dlat / 2)) ** 2 + np.cos(lat_rad) * np.cos(np.roll(lat_rad, 1)) * (
+        np.sin(dlon / 2)
+    ) ** 2
+    a[0] = 0  # first element is artificial because of prepend
+    c = 2 * np.arcsin(np.sqrt(np.clip(a, 0, 1)))
+    distances = 6371000 * c  # Earth radius * angle
+
+    return distances
+
+
+def _compute_time_array(lat: list[float], lon: list[float], speed_kmh: np.ndarray) -> np.ndarray:
+    """Compute cumulative time that preserves total distance for a speed trace."""
+
+    segment_distances = _compute_segment_distances(lat, lon)
+    speed_mps = np.array(speed_kmh, dtype=float) / 3.6
+    prev_speed = np.concatenate(([speed_mps[0]], speed_mps[:-1]))
+    segment_speed = np.maximum((speed_mps + prev_speed) / 2, 0.5)
+    segment_time = segment_distances / segment_speed
+    return np.cumsum(segment_time)
 
 
 # ==============================================================
@@ -413,8 +445,8 @@ def generate_london_osm_cycle(api_key: str | None = None):
     )
     speed = np.clip(speed * traffic_scaling, 0, 45)
 
-    # 6. Convert to drive cycle time (10s interval)
-    t = np.arange(0, len(speed)*10, 10)
+    # 6. Convert to drive cycle time using actual route spacing
+    t = _compute_time_array(lat, lon, speed)
 
     # 7. Save cycle YAML (pass as list to allow multiple future cycles)
     save_cycle_yaml([
@@ -447,7 +479,7 @@ def generate_london_osm_cycle(api_key: str | None = None):
     grade2 = compute_grade(elevation2, lat2, lon2)
     speed2 = generate_speed_profile(lat2, lon2)
     speed2 = apply_urban_events(speed2)
-    t2 = np.arange(0, len(speed2)*10, 10)
+    t2 = _compute_time_array(lat2, lon2, speed2)
     
     save_cycle_yaml([
         {
@@ -477,7 +509,7 @@ def generate_london_osm_cycle(api_key: str | None = None):
     grade3 = compute_grade(elevation3, lat3, lon3)
     speed3 = generate_speed_profile(lat3, lon3)
     speed3 = apply_urban_events(speed3)
-    t3 = np.arange(0, len(speed3)*10, 10)
+    t3 = _compute_time_array(lat3, lon3, speed3)
     
     save_cycle_yaml([
         {
