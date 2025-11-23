@@ -74,13 +74,11 @@ def resolve_tomtom_api_key(explicit_key: str | None = None) -> str:
     if explicit_key:
         return explicit_key
 
-    candidates = ["TOM_API_KEY", "TOMTOM_API_KEY", "tom_api_key"]
-    api_key = _resolve_api_key_from_candidates(candidates)
+    api_key = _resolve_api_key_from_candidates(["TOM_API_KEY"])
 
     if not api_key:
-        names = ", ".join(candidates)
         raise EnvironmentError(
-            f"Missing TomTom API key. Set one of {{{names}}} in the environment or .env file."
+            f"Missing TomTom API key. Set TOM_API_KEY in the environment or .env file."
         )
 
     return api_key
