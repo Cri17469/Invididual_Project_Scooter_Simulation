@@ -39,18 +39,48 @@ def _read_api_key_from_env_file(var_name: str, env_filename: str = ".env"):
     return None
 
 
+def _resolve_api_key_from_candidates(candidates: list[str], env_filename: str = ".env") -> str | None:
+    """Try multiple env variable names before giving up."""
+    for name in candidates:
+        value = os.getenv(name)
+        if value:
+            return value
+
+    for name in candidates:
+        value = _read_api_key_from_env_file(name, env_filename)
+        if value:
+            return value
+
+    return None
+
+
 def resolve_ors_api_key(explicit_key: str | None = None) -> str:
     """Resolve the OpenRouteService API key from the caller/env/.env file."""
     if explicit_key:
         return explicit_key
 
-    api_key = os.getenv("ORS_API_KEY")
-    if not api_key:
-        api_key = _read_api_key_from_env_file("ORS_API_KEY")
+    api_key = _resolve_api_key_from_candidates(["ORS_API_KEY"])
 
     if not api_key:
         raise EnvironmentError(
             "Missing OpenRouteService API key. Set ORS_API_KEY in the environment or .env file."
+        )
+
+    return api_key
+
+
+def resolve_tomtom_api_key(explicit_key: str | None = None) -> str:
+    """Resolve the TomTom Traffic API key from env or `.env`."""
+    if explicit_key:
+        return explicit_key
+
+    candidates = ["TOM_API_KEY", "TOMTOM_API_KEY", "tom_api_key"]
+    api_key = _resolve_api_key_from_candidates(candidates)
+
+    if not api_key:
+        names = ", ".join(candidates)
+        raise EnvironmentError(
+            f"Missing TomTom API key. Set one of {{{names}}} in the environment or .env file."
         )
 
     return api_key
@@ -107,6 +137,84 @@ def extract_segment_lengths(route_json):
             lengths.append(step.get("distance", 0.0))
 
     return lengths
+
+
+def _fetch_tomtom_flow_ratio(lat: float, lon: float, api_key: str):
+    """Return congestion coefficient plus raw TomTom speeds.
+
+    The Flow Segment Data API provides a current speed and a free-flow speed.
+    We treat the ratio of the two as a multiplier for our synthetic speed
+    profile.
+    """
+
+    url = "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json"
+    params = {
+        "point": f"{lat},{lon}",
+        "unit": "KMPH",
+        "key": api_key,
+    }
+
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError, KeyError):
+        return None, None, None
+
+    flow = data.get("flowSegmentData", {})
+    current_speed = flow.get("currentSpeed")
+    free_speed = flow.get("freeFlowSpeed")
+
+    if not current_speed or not free_speed:
+        return None, current_speed, free_speed
+    if free_speed <= 0:
+        return None, current_speed, free_speed
+
+    ratio = current_speed / free_speed
+    return ratio, current_speed, free_speed
+
+
+def compute_traffic_scaling(route_json, lat, lon, tomtom_api_key: str):
+    """Derive per-point traffic scaling factors and step metadata."""
+
+    scaling = np.ones(len(lat))
+    steps_metadata = []
+
+    segments = route_json['features'][0]['properties'].get('segments', [])
+
+    for seg_idx, seg in enumerate(segments):
+        for step_idx, step in enumerate(seg.get('steps', [])):
+            way_points = step.get("way_points", [0, 0])
+            start_idx = max(0, min(int(way_points[0]), len(lat) - 1))
+            end_idx = max(0, min(int(way_points[1]), len(lat) - 1))
+            if end_idx < start_idx:
+                start_idx, end_idx = end_idx, start_idx
+
+            mid_idx = (start_idx + end_idx) // 2
+            midpoint_lat = lat[mid_idx]
+            midpoint_lon = lon[mid_idx]
+
+            ratio, current_speed, free_speed = _fetch_tomtom_flow_ratio(
+                midpoint_lat, midpoint_lon, tomtom_api_key
+            )
+
+            if ratio is None:
+                ratio = 1.0
+
+            ratio = float(np.clip(ratio, 0.2, 1.2))
+            scaling[start_idx:end_idx + 1] = ratio
+
+            steps_metadata.append({
+                "road_name": step.get("name", ""),
+                "segment_index": seg_idx,
+                "step_index": step_idx,
+                "way_points": [start_idx, end_idx],
+                "traffic_scaling": ratio,
+                "tomtom_current_speed_kmh": current_speed,
+                "tomtom_free_flow_speed_kmh": free_speed,
+            })
+
+    return scaling, steps_metadata
 
 
 # ==============================================================
@@ -251,6 +359,8 @@ def save_cycle_yaml(cycles):
             "time_s": cycle["t"].tolist(),
             "speed_kmh": cycle["speed"].tolist(),
             "grade_percent": cycle["grade"].tolist(),
+            "traffic_scaling": cycle.get("traffic_scaling", np.ones_like(cycle["speed"])).tolist(),
+            "traffic_steps": cycle.get("traffic_steps", []),
             # Extra metadata (ignored by loader)
             "road_names": cycle["road_names"],
             "segment_lengths_m": cycle["segment_lengths"],
@@ -281,6 +391,7 @@ def generate_london_osm_cycle(api_key: str | None = None):
     end   = (51.5033, -0.1133)  # Waterloo Station
 
     ORS_API_KEY = resolve_ors_api_key(api_key)
+    tomtom_api_key = resolve_tomtom_api_key()
 
     # 1. Get OSM route + geometry
     lat, lon, route_json = fetch_osm_route(start, end, ORS_API_KEY)
@@ -295,9 +406,14 @@ def generate_london_osm_cycle(api_key: str | None = None):
     # 4. Grade (%)
     grade = compute_grade(elevation, lat, lon)
 
-    # 5. Speed profile
+    # 5. Speed profile (base + live traffic)
     speed = generate_speed_profile(lat, lon)
     speed = apply_urban_events(speed)
+
+    traffic_scaling, traffic_steps = compute_traffic_scaling(
+        route_json, lat, lon, tomtom_api_key
+    )
+    speed = np.clip(speed * traffic_scaling, 0, 45)
 
     # 6. Convert to drive cycle time (10s interval)
     t = np.arange(0, len(speed)*10, 10)
@@ -311,6 +427,8 @@ def generate_london_osm_cycle(api_key: str | None = None):
             "t": t,
             "speed": speed,
             "grade": grade,
+            "traffic_scaling": traffic_scaling,
+            "traffic_steps": traffic_steps,
             "road_names": road_names,
             "segment_lengths": segment_lengths,
             "lat": lat,
