@@ -33,6 +33,7 @@ build/
 # Data files
 data/cycle.yaml
 data/cycle_canary_to_ucl.yaml
+data/cambridge.yaml
 
 # Cache files
 cache/*
