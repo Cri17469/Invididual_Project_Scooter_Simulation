@@ -18,3 +18,10 @@ python src/generate_london_osm_cycle.py
 
 The script now reads the key from the function argument, the environment, or the `.env`
 file—whichever is provided first.
+
+## TomTom Traffic API key
+
+`generate_london_osm_cycle.py` now scales the generated speed profile using live traffic
+conditions from TomTom's Flow Segment Data API. Add your TomTom key to `.env` as
+`TOM_API_KEY` (or `TOMTOM_API_KEY`/`tom_api_key`) so the generator can fetch the
+congestion coefficients for each road segment.
