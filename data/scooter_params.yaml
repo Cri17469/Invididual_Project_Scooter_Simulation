@@ -4,6 +4,9 @@ vehicle:
   CdA_m2: 0.4
   Cr: 0.012
 
+driver:
+  mass_kg: 75
+
 motor:
   efficiency: 0.88
   regen_efficiency: 0.75
