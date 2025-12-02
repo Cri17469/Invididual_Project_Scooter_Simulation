@@ -7,6 +7,7 @@ from utils import get_data_dir
 @dataclass
 class VehicleParams:
     mass_kg: float
+    rider_mass_kg: float
     wheel_radius_m: float
     CdA_m2: float
     Cr: float
@@ -38,7 +39,13 @@ def load_vehicle_params(filename: str = "scooter_params.yaml") -> VehicleParams:
         raise ValueError(f"[Error] Failed to parse YAML file: {e}")
 
     try:
-        v, m, b, e = data["vehicle"], data["motor"], data["battery"], data["environment"]
+        v, d, m, b, e = (
+            data["vehicle"],
+            data["driver"],
+            data["motor"],
+            data["battery"],
+            data["environment"],
+        )
     except KeyError as e:
         raise KeyError(f"[Error] Missing field in YAML file: {e}")
 
@@ -47,6 +54,7 @@ def load_vehicle_params(filename: str = "scooter_params.yaml") -> VehicleParams:
         wheel_radius_m=v["wheel_radius_m"],
         CdA_m2=v["CdA_m2"],
         Cr=v["Cr"],
+        rider_mass_kg=d["mass_kg"],
         eta_m=m["efficiency"],
         eta_regen=m["regen_efficiency"],
         Pchg_max=b["charge_power_limit_W"],

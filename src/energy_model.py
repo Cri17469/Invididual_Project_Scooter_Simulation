@@ -20,12 +20,14 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
     dt = np.diff(t, prepend=t[0])
     a = np.gradient(v, t)
 
+    total_mass = params.mass_kg + params.rider_mass_kg
+
     # ==========================
     # 1. Forces
     # ==========================
-    F_inert = params.mass_kg * a
-    F_grade = params.mass_kg * params.g * np.sin(theta)
-    F_roll = params.Cr * params.mass_kg * params.g * np.cos(theta)
+    F_inert = total_mass * a
+    F_grade = total_mass * params.g * np.sin(theta)
+    F_roll = params.Cr * total_mass * params.g * np.cos(theta)
     F_aero = 0.5 * params.rho_air * params.CdA_m2 * v**2
     F_trac = F_inert + F_grade + F_roll + F_aero
 
@@ -55,6 +57,25 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
     E_Wh = np.trapezoid(P_bat, t) / 3600.0
     dist_km = np.trapezoid(v, t) / 1000.0
     Wh_per_km = E_Wh / max(dist_km, 1e-9)
+
+    def signed_energy(power_trace: np.ndarray) -> float:
+        """Integrate a power trace in Wh (signed)."""
+        return np.trapezoid(power_trace, t) / 3600.0
+
+    def positive_energy(power_trace: np.ndarray) -> float:
+        """Compute propulsion-only (positive) energy for a power trace in Wh."""
+        return signed_energy(np.where(power_trace > 0, power_trace, 0.0))
+
+    grade_power = F_grade * v
+    grade_assist_Wh = signed_energy(np.where(grade_power < 0, -grade_power, 0.0))
+    grade_work_Wh = signed_energy(grade_power)
+
+    component_energy_Wh = {
+        "inertial": positive_energy(F_inert * v),
+        "grade": positive_energy(grade_power),
+        "rolling": positive_energy(F_roll * v),
+        "aerodynamic": positive_energy(F_aero * v),
+    }
 
     # ==========================
     # 5. Regenerative braking energy
@@ -129,5 +150,9 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
         "regen_fraction": regen_fraction,
         "regen_peak_power_W": regen_peak_power_W,
         "SoC_trace": SoC.tolist(),
-        "final_SoC": final_soc
+        "final_SoC": final_soc,
+        "component_energy_Wh": component_energy_Wh,
+        "grade_work_Wh": grade_work_Wh,
+        "grade_assist_Wh": grade_assist_Wh,
+        "total_mass_kg": total_mass,
     }
