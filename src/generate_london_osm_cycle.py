@@ -169,6 +169,54 @@ def compute_grade(elevation, lat, lon):
 
 
 # ==============================================================
+# 4b. Derive realistic time stamps from geometry + speed
+# ==============================================================
+
+def compute_time_from_geometry(lat, lon, speed_kmh, min_speed_kmh: float = 1.0):
+    """Accumulate elapsed time using segment lengths and local speed.
+
+    Parameters
+    ----------
+    lat, lon : Sequence[float]
+        Geographic coordinates (degrees) for each sample point.
+    speed_kmh : Sequence[float]
+        Speed profile (km/h) aligned with the coordinate samples.
+    min_speed_kmh : float, optional
+        Floor applied when averaging segment speeds to avoid division by zero
+        during stops; defaults to 1 km/h.
+
+    Returns
+    -------
+    np.ndarray
+        Monotonic time stamps in seconds with the same length as ``lat``.
+    """
+
+    if len(lat) != len(lon) or len(lat) != len(speed_kmh):
+        raise ValueError("lat, lon, and speed_kmh must have the same length")
+
+    lat_rad = np.radians(lat)
+    lon_rad = np.radians(lon)
+
+    t = np.zeros(len(lat))
+
+    for i in range(1, len(lat)):
+        dlat = lat_rad[i] - lat_rad[i - 1]
+        dlon = lon_rad[i] - lon_rad[i - 1]
+
+        a = (np.sin(dlat / 2)) ** 2 + np.cos(lat_rad[i - 1]) * np.cos(lat_rad[i]) * (np.sin(dlon / 2)) ** 2
+        c = 2 * np.arcsin(np.sqrt(a))
+        dx = 6371000 * c  # meters
+
+        seg_speed_kmh = max(np.mean([speed_kmh[i - 1], speed_kmh[i]]), min_speed_kmh)
+        seg_speed_ms = seg_speed_kmh / 3.6
+
+        dt = dx / seg_speed_ms if seg_speed_ms > 0 else 0.0
+        t[i] = t[i - 1] + dt
+
+    return t
+
+
+# ==============================================================
 # 5. Generate London-style speed profile
 # ==============================================================
 
@@ -299,8 +347,8 @@ def generate_london_osm_cycle(api_key: str | None = None):
     speed = generate_speed_profile(lat, lon)
     speed = apply_urban_events(speed)
 
-    # 6. Convert to drive cycle time (10s interval)
-    t = np.arange(0, len(speed)*10, 10)
+    # 6. Convert to drive cycle time based on geometry + local speed
+    t = compute_time_from_geometry(lat, lon, speed)
 
     # 7. Save cycle YAML (pass as list to allow multiple future cycles)
     save_cycle_yaml([
