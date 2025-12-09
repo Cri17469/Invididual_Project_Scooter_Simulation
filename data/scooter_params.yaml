@@ -1,5 +1,5 @@
 vehicle:
-  mass_kg: 120
+  mass_kg: 12
   wheel_radius_m: 0.165
   CdA_m2: 0.4
   Cr: 0.012
