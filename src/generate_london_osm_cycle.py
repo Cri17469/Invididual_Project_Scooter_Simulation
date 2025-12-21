@@ -64,7 +64,7 @@ def fetch_osm_route(start, end, api_key, profile="driving-car"):
     """
     client = ors.Client(key=api_key)
 
-    route = client.directions(
+    route = client.directions( # type: ignore
         coordinates=[(start[1], start[0]), (end[1], end[0])],
         profile=profile,
         format="geojson",
