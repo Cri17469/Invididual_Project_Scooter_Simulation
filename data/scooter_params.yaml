@@ -4,14 +4,14 @@ vehicle:
   mass_kg: 17 # [1]
   wheel_radius_m: 0.240 # [1]
   CdA_m2: 0.4
-  Cr: 0.012
+  Cr: 0.024
 
 driver:
   mass_kg: 75
 
 motor:
   efficiency: 0.88
-  regen_efficiency: 0.75
+  regen_efficiency: 0.45
   T_drive_max_Nm: 45
   T_regen_max_Nm: 25
 
