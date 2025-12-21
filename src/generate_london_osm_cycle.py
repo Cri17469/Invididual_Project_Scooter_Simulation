@@ -222,14 +222,14 @@ def compute_time_from_geometry(lat, lon, speed_kmh, min_speed_kmh: float = 1.0):
 
 def generate_speed_profile(lat, lon):
     """
-    London-style base speed: 10–35 km/h waves + random variability.
+    London-style base speed: 10–25 km/h waves + random variability.
     """
     n = len(lat)
 
     base = []
     for i in range(n):
         cyc = (np.sin(2*np.pi*i/n*4) + 1) / 2
-        spd = 12 + cyc * 23  # 12–35 km/h typical
+        spd = 10 + cyc * 15  # 10–25 km/h typical
         base.append(spd)
 
     return np.array(base)
@@ -266,7 +266,7 @@ def apply_urban_events(speed):
 
     # Add natural noise
     noise = np.random.normal(0, 2.0, n)
-    speed = np.clip(speed + noise, 0, 45)
+    speed = np.clip(speed + noise, 0, 25)
 
     return speed
 
