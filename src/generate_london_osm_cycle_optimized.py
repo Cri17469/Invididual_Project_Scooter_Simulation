@@ -92,6 +92,7 @@ def generate_london_osm_cycle_optimized(
     total_distance_m = float(sum(segment_lengths))
     duration_s = float(t[-1]) if len(t) else 0.0
 
+    road_names = route_data.get("road_names") or ["Optimized Route"]
     route_json = {
         "features": [
             {
@@ -116,7 +117,7 @@ def generate_london_osm_cycle_optimized(
                 "t": t,
                 "speed": speed,
                 "grade": grade,
-                "road_names": ["Optimized Route"],
+                "road_names": road_names,
                 "segment_lengths": [float(length) for length in segment_lengths],
                 "lat": lat,
                 "lon": lon,

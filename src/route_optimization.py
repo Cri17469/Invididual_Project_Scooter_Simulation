@@ -15,7 +15,7 @@ from utils import get_data_dir
 
 MAX_SPEED_KMH = 25.0
 DEFAULT_WEIGHTS = {
-    "energy": 1.0,
+    "energy": 5.0,
     "time": 1.0,
 }
 DEFAULT_NETWORK_TYPE = "bike"
@@ -216,6 +216,7 @@ def optimize_route(
     route_length_m = 0.0
     route_time_s = 0.0
     route_energy_est_Wh = 0.0
+    road_names: list[str] = []
     for u, v in zip(route_nodes[:-1], route_nodes[1:]):
         edge_data = graph_proj.get_edge_data(u, v)
         if not edge_data:
@@ -224,6 +225,13 @@ def optimize_route(
         route_length_m += float(edge.get("length", 0.0))
         route_time_s += float(edge.get("time_est_s", 0.0))
         route_energy_est_Wh += float(edge.get("energy_est_Wh", 0.0))
+        edge_name = edge.get("name")
+        if isinstance(edge_name, list):
+            edge_name = edge_name[0] if edge_name else None
+        if isinstance(edge_name, str):
+            edge_name = edge_name.strip()
+        if edge_name and edge_name not in road_names:
+            road_names.append(edge_name)
 
     return {
         "origin": {
@@ -236,6 +244,7 @@ def optimize_route(
         },
         "nodes": route_nodes,
         "coords": coords,
+        "road_names": road_names,
         "summary": {
             "distance_m": route_length_m,
             "duration_s": route_time_s,
