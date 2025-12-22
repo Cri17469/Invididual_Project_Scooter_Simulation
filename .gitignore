@@ -31,7 +31,8 @@ build/
 .env.local
 
 # Data files
-data/cycle.yaml
+data/*
+!data/scooter_params.yaml
 
 # Cache files
 cache/*
