@@ -2,6 +2,8 @@ import csv
 import json
 from pathlib import Path
 
+import yaml
+
 from cycle_loader import load_drive_cycle
 from energy_model import simulate_energy
 from utils import get_data_dir
@@ -11,8 +13,9 @@ from vehicle_params import load_vehicle_params
 BASELINE_CYCLE_FILENAME = "cycle.yaml"
 OPTIMIZED_CYCLE_FILENAME = "cycle_optimized.yaml"
 PARAMS_FILENAME = "scooter_params.yaml"
-PLOT_ENERGY_TRACES = False
-PLOT_COMPARISON = False
+PLOT_ENERGY_TRACES = True
+PLOT_COMPARISON = True
+PLOT_ROUTES = True
 COMPARISON_JSON = "comparison_summary.json"
 COMPARISON_CSV = "comparison_summary.csv"
 
@@ -91,6 +94,70 @@ def plot_comparison_summary(summaries: list[dict]) -> None:
     plt.show()
 
 
+def load_route_coords(filename: str) -> tuple[list[float], list[float]]:
+    data_dir = get_data_dir()
+    file_path = data_dir / filename
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except Exception as e:
+        raise RuntimeError(f"[route_plot] Cannot read YAML: {e}")
+
+    route_coords = data.get("route_coords", {})
+    lat = route_coords.get("lat", [])
+    lon = route_coords.get("lon", [])
+    if not lat or not lon:
+        raise RuntimeError(
+            f"[route_plot] Missing route coordinates in {file_path}."
+        )
+    if len(lat) != len(lon):
+        raise RuntimeError(
+            f"[route_plot] Mismatched lat/lon lengths in {file_path}."
+        )
+    return lat, lon
+
+
+def plot_route_comparison(
+    baseline_filename: str,
+    optimized_filename: str,
+) -> None:
+    import matplotlib.pyplot as plt
+
+    baseline_lat, baseline_lon = load_route_coords(baseline_filename)
+    optimized_lat, optimized_lon = load_route_coords(optimized_filename)
+
+    plt.figure(figsize=(6, 6))
+    plt.plot(baseline_lon, baseline_lat, label="Baseline route", color="#4C72B0")
+    plt.plot(
+        optimized_lon,
+        optimized_lat,
+        label="Optimized route",
+        color="#55A868",
+    )
+    plt.scatter(
+        [baseline_lon[0], baseline_lon[-1]],
+        [baseline_lat[0], baseline_lat[-1]],
+        color="#4C72B0",
+        marker="o",
+        s=30,
+    )
+    plt.scatter(
+        [optimized_lon[0], optimized_lon[-1]],
+        [optimized_lat[0], optimized_lat[-1]],
+        color="#55A868",
+        marker="o",
+        s=30,
+    )
+    plt.title("Route comparison")
+    plt.xlabel("Longitude")
+    plt.ylabel("Latitude")
+    plt.legend()
+    plt.axis("equal")
+    plt.tight_layout()
+    plt.show()
+
+
 def main():
     try:
         baseline_cycle = load_drive_cycle(BASELINE_CYCLE_FILENAME)
@@ -137,6 +204,8 @@ def main():
 
         if PLOT_COMPARISON:
             plot_comparison_summary([baseline_summary, optimized_summary])
+        if PLOT_ROUTES:
+            plot_route_comparison(BASELINE_CYCLE_FILENAME, OPTIMIZED_CYCLE_FILENAME)
 
     except Exception as e:
         print(f"[Fatal error] Simulation failed: {e}")
