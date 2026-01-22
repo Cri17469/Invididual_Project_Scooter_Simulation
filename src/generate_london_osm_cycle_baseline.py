@@ -56,6 +56,19 @@ def _route_to_coords(route_data: dict) -> tuple[list[float], list[float]]:
         raise ValueError("Baseline route must include at least two coordinates.")
     return lat, lon
 
+
+def _update_route_summary(route_data: dict, distance_m: float, duration_s: float) -> bool:
+    summary = route_data.setdefault("summary", {})
+    updated = False
+    if summary.get("distance_m") != distance_m:
+        summary["distance_m"] = distance_m
+        updated = True
+    if summary.get("duration_s") is None or summary.get("duration_s") <= 0:
+        summary["duration_s"] = duration_s
+        updated = True
+    return updated
+
+
 def _needs_route_refresh(route_data: dict, expected_weights: dict[str, float]) -> bool:
     summary = route_data.get("summary", {})
     weights = summary.get("weights")
@@ -68,6 +81,8 @@ def _needs_route_refresh(route_data: dict, expected_weights: dict[str, float]) -
     if energy_est_wh is None or energy_est_wh <= 0:
         return True
     return False
+
+
 # ==============================================================
 # Main entry
 # ==============================================================
@@ -113,6 +128,9 @@ def generate_london_osm_cycle_baseline(
     segment_lengths = _segment_lengths(lat, lon)
     total_distance_m = float(sum(segment_lengths))
     duration_s = float(t[-1]) if len(t) else 0.0
+
+    if _update_route_summary(route_data, total_distance_m, duration_s):
+        save_optimized_route(route_data, route_filename)
 
     road_names = route_data.get("road_names") or ["Baseline Route"]
     route_json = {
