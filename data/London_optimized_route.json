@@ -370,9 +370,9 @@
     "Mepham Street"
   ],
   "summary": {
-    "distance_m": 3112.47891956556,
+    "distance_m": 3097.1395681675685,
     "duration_s": 448.1969644174407,
-    "energy_est_Wh": 62.24957839131119,
+    "energy_est_Wh": 26.153150054137488,
     "weights": {
       "energy": 1.0,
       "time": 0.0

@@ -1,0 +1,24 @@
+[
+  {
+    "label": "london_osm_urban_baseline (baseline)",
+    "total_energy_consumed_Wh": 29.13780006784524,
+    "energy_recovered_Wh": 0.5224011701656249,
+    "net_energy_Wh": 28.615398897679615,
+    "wh_per_km": 9.239299123549026,
+    "trip_time_s": 668.964667884967,
+    "distance_km": 3.0971395681675675,
+    "net_energy_improvement_percent": 0.0,
+    "wh_per_km_improvement_percent": 0.0
+  },
+  {
+    "label": "london_osm_urban_optimized (optimized)",
+    "total_energy_consumed_Wh": 27.45176636413636,
+    "energy_recovered_Wh": 1.298616309998874,
+    "net_energy_Wh": 26.153150054137488,
+    "wh_per_km": 8.444291733875938,
+    "trip_time_s": 857.2628485191796,
+    "distance_km": 3.0971395681675684,
+    "net_energy_improvement_percent": 8.60462876071173,
+    "wh_per_km_improvement_percent": 8.604628760711753
+  }
+]
