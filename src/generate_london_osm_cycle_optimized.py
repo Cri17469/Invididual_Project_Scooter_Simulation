@@ -128,20 +128,20 @@ def generate_london_osm_cycle_optimized(
     if output_filename is None:
         output_filename = f"{location}_cycle_optimized.yaml"
     route_path = data_dir / route_filename
-    expected_weights = {"energy": 1.0, "time": 0.0}
+    expected_weights = {"energy": 10.0, "time": 1.0}
     if route_path.exists():
         route_data = load_optimized_route(route_filename)
         if _needs_route_refresh(route_data, expected_weights):
             route_data = optimize_route(
-                origin=(51.5246, -0.1340),
-                destination=(51.5033, -0.1133),
+                origin=(51.5565, -0.1646),
+                destination=(51.5943, -0.1302),
                 weights=expected_weights,
             )
             save_optimized_route(route_data, route_filename)
     else:
         route_data = optimize_route(
-            origin=(51.5246, -0.1340),
-            destination=(51.5033, -0.1133),
+            origin=(51.5565, -0.1646),
+            destination=(51.5943, -0.1302),
             weights=expected_weights,
         )
         save_optimized_route(route_data, route_filename)

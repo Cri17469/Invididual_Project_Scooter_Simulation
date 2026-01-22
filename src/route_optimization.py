@@ -18,13 +18,13 @@ from vehicle_params import load_vehicle_params
 
 MAX_SPEED_KMH = 25.0
 DEFAULT_REGEN_EFFICIENCY = load_vehicle_params().eta_regen
-DEFAULT_GRADE_ENERGY_PER_PERCENT = 1.5
+DEFAULT_GRADE_ENERGY_PER_PERCENT = 10.0  # Wh per km per percent grade
 DEFAULT_WEIGHTS = {
     "energy": 5.0,
     "time": 1.0,
 }
 DEFAULT_NETWORK_TYPE = "bike"
-DEFAULT_BUFFER_M = 1500
+DEFAULT_BUFFER_M = 3000
 DEFAULT_GRAPH_FILENAME = "london_osm_graph.graphml"
 DEFAULT_ROUTE_FILENAME = "optimized_route.json"
 
