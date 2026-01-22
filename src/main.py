@@ -10,8 +10,8 @@ from utils import get_data_dir
 from vehicle_params import load_vehicle_params
 
 
-BASELINE_CYCLE_FILENAME = "cycle.yaml"
-OPTIMIZED_CYCLE_FILENAME = "cycle_optimized.yaml"
+BASELINE_CYCLE_FILENAME = "London_cycle_baseline.yaml"
+OPTIMIZED_CYCLE_FILENAME = "London_cycle_optimized.yaml"
 PARAMS_FILENAME = "scooter_params.yaml"
 PLOT_ENERGY_TRACES = True
 PLOT_COMPARISON = True
