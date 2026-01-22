@@ -374,8 +374,8 @@
     "duration_s": 448.1969644174407,
     "energy_est_Wh": 62.24957839131119,
     "weights": {
-      "energy": 5.0,
-      "time": 1.0
+      "energy": 1.0,
+      "time": 0.0
     },
     "max_speed_kmh": 25.0,
     "network_type": "bike"
