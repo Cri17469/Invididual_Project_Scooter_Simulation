@@ -1,19 +1,24 @@
 import json
+import time
 from pathlib import Path
 from typing import Iterable
 
 import networkx as nx
 import osmnx as ox
+import requests
 from shapely.geometry import Point
 
 
 from utils import get_data_dir
+from vehicle_params import load_vehicle_params
 
 # ==============================================================
 # Config
 # ==============================================================
 
 MAX_SPEED_KMH = 25.0
+DEFAULT_REGEN_EFFICIENCY = load_vehicle_params().eta_regen
+DEFAULT_GRADE_ENERGY_PER_PERCENT = 1.5
 DEFAULT_WEIGHTS = {
     "energy": 5.0,
     "time": 1.0,
@@ -68,13 +73,62 @@ def _normalize_speed_kph(speed_value: float | str | list | None, fallback: float
         return fallback
 
 
-def estimate_energy_wh(length_m: float, speed_kph: float, max_speed_kmh: float) -> float:
+def estimate_energy_wh(
+    length_m: float,
+    speed_kph: float,
+    max_speed_kmh: float,
+    grade_percent: float = 0.0,
+    regen_efficiency: float = DEFAULT_REGEN_EFFICIENCY,
+    grade_energy_per_percent: float = DEFAULT_GRADE_ENERGY_PER_PERCENT,
+) -> float:
     length_km = length_m / 1000.0
     base_wh_per_km = 12.0
     aero_factor = 8.0
     speed_factor = (speed_kph / max_speed_kmh) ** 2 if max_speed_kmh > 0 else 1.0
     wh_per_km = base_wh_per_km + aero_factor * speed_factor
+    grade_wh_per_km = grade_energy_per_percent * grade_percent
+    if grade_wh_per_km < 0:
+        grade_wh_per_km *= (1.0 - regen_efficiency)
+    wh_per_km = max(wh_per_km + grade_wh_per_km, 0.0)
     return length_km * wh_per_km
+
+
+def _fetch_node_elevations(graph: nx.MultiDiGraph, chunk_size: int = 80, pause_s: float = 0.2) -> None:
+    nodes = list(graph.nodes(data=True))
+    coords = [(node_id, data.get("y"), data.get("x")) for node_id, data in nodes]
+    for i in range(0, len(coords), chunk_size):
+        chunk = coords[i:i + chunk_size]
+        locations = "|".join([f"{lat},{lon}" for _, lat, lon in chunk])
+        url = f"https://api.open-elevation.com/api/v1/lookup?locations={locations}"
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            for (node_id, _, _), result in zip(chunk, data.get("results", []), strict=False):
+                graph.nodes[node_id]["elevation"] = float(result.get("elevation", 0.0))
+        except requests.RequestException:
+            for node_id, _, _ in chunk:
+                graph.nodes[node_id]["elevation"] = 0.0
+        time.sleep(pause_s)
+
+
+def _ensure_edge_grades(
+    graph: nx.MultiDiGraph,
+    graph_filename: str = DEFAULT_GRAPH_FILENAME,
+) -> None:
+    if any("elevation" not in data for _, data in graph.nodes(data=True)):
+        _fetch_node_elevations(graph)
+    ox.add_edge_grades(graph, add_absolute=True)
+    data_dir = get_data_dir()
+    graph_path = data_dir / graph_filename
+    ox.save_graphml(graph, graph_path)
+
+
+def _extract_grade_percent(edge_data: dict) -> float:
+    grade = edge_data.get("grade")
+    if grade is None:
+        return 0.0
+    return float(grade) * 100.0
 
 
 def build_graph(
@@ -179,6 +233,7 @@ def optimize_route(
         buffer_m=buffer_m,
         graph_filename=graph_filename,
     )
+    _ensure_edge_grades(graph, graph_filename=graph_filename)
     graph_proj, origin_node, destination_node = resolve_nodes(graph)
 
     for u, v, k, data in graph_proj.edges(keys=True, data=True):
@@ -186,7 +241,13 @@ def optimize_route(
         speed_kph = _normalize_speed_kph(data.get("speed_kph"), max_speed_kmh)
         speed_kph = min(speed_kph, max_speed_kmh)
         time_s = length_m / (speed_kph / 3.6) if speed_kph > 0 else 0.0
-        energy_wh = estimate_energy_wh(length_m, speed_kph, max_speed_kmh)
+        grade_percent = _extract_grade_percent(data)
+        energy_wh = estimate_energy_wh(
+            length_m,
+            speed_kph,
+            max_speed_kmh,
+            grade_percent=grade_percent,
+        )
         data["cost"] = weights.get("energy", 1.0) * energy_wh + weights.get("time", 1.0) * time_s
         data["energy_est_Wh"] = energy_wh
         data["time_est_s"] = time_s
