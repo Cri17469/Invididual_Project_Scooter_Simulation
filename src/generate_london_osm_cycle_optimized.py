@@ -1,7 +1,9 @@
+from math import isclose
 from pathlib import Path
 
 import numpy as np
 
+from energy_model import simulate_energy
 from generate_london_osm_cycle import (
     apply_urban_events,
     compute_grade,
@@ -16,6 +18,7 @@ from route_optimization import (
     save_optimized_route,
 )
 from utils import get_data_dir
+from vehicle_params import load_vehicle_params
 
 # ==============================================================
 # Config
@@ -56,6 +59,45 @@ def _route_to_coords(route_data: dict) -> tuple[list[float], list[float]]:
         raise ValueError("Optimized route must include at least two coordinates.")
     return lat, lon
 
+
+def _simulate_cycle_energy_wh(
+    t: np.ndarray, speed_kmh: np.ndarray, grade_percent: np.ndarray
+) -> float:
+    if len(t) == 0:
+        return 0.0
+    cycle = {
+        "t": np.asarray(t, dtype=float),
+        "v": np.asarray(speed_kmh, dtype=float) / 3.6,
+        "theta": np.arctan(np.asarray(grade_percent, dtype=float) / 100.0),
+    }
+    params = load_vehicle_params()
+    result = simulate_energy(cycle, params, plot=False)
+    return float(result["E_Wh"])
+
+
+def _update_route_summary(
+    route_data: dict,
+    distance_m: float,
+    duration_s: float,
+    energy_est_wh: float,
+) -> bool:
+    summary = route_data.setdefault("summary", {})
+    updated = False
+    if summary.get("distance_m") != distance_m:
+        summary["distance_m"] = distance_m
+        updated = True
+    if summary.get("duration_s") is None or summary.get("duration_s") <= 0:
+        summary["duration_s"] = duration_s
+        updated = True
+    if summary.get("energy_est_Wh") is None or summary.get("energy_est_Wh") <= 0:
+        summary["energy_est_Wh"] = energy_est_wh
+        updated = True
+    elif not isclose(summary.get("energy_est_Wh"), energy_est_wh, rel_tol=1e-6):
+        summary["energy_est_Wh"] = energy_est_wh
+        updated = True
+    return updated
+
+
 def _needs_route_refresh(route_data: dict, expected_weights: dict[str, float]) -> bool:
     summary = route_data.get("summary", {})
     weights = summary.get("weights")
@@ -68,6 +110,8 @@ def _needs_route_refresh(route_data: dict, expected_weights: dict[str, float]) -
     if energy_est_wh is None or energy_est_wh <= 0:
         return True
     return False
+
+
 # ==============================================================
 # Main entry
 # ==============================================================
@@ -113,6 +157,10 @@ def generate_london_osm_cycle_optimized(
     segment_lengths = _segment_lengths(lat, lon)
     total_distance_m = float(sum(segment_lengths))
     duration_s = float(t[-1]) if len(t) else 0.0
+    energy_est_wh = _simulate_cycle_energy_wh(t, speed, grade)
+
+    if _update_route_summary(route_data, total_distance_m, duration_s, energy_est_wh):
+        save_optimized_route(route_data, route_filename)
 
     road_names = route_data.get("road_names") or ["Optimized Route"]
     route_json = {
