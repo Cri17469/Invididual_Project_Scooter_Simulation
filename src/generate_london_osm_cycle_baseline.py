@@ -49,11 +49,11 @@ def _segment_lengths(lat: list[float], lon: list[float]) -> list[float]:
 def _route_to_coords(route_data: dict) -> tuple[list[float], list[float]]:
     coords = route_data.get("coords", [])
     if not coords:
-        raise ValueError("Optimized route is missing coordinate data.")
+        raise ValueError("Baseline route is missing coordinate data.")
     lat = [point["lat"] for point in coords]
     lon = [point["lon"] for point in coords]
     if len(lat) < 2:
-        raise ValueError("Optimized route must include at least two coordinates.")
+        raise ValueError("Baseline route must include at least two coordinates.")
     return lat, lon
 
 def _needs_route_refresh(route_data: dict, expected_weights: dict[str, float]) -> bool:
@@ -73,18 +73,18 @@ def _needs_route_refresh(route_data: dict, expected_weights: dict[str, float]) -
 # ==============================================================
 
 
-def generate_london_osm_cycle_optimized(
+def generate_london_osm_cycle_baseline(
     location: str = DEFAULT_LOCATION,
     route_filename: str | None = None,
     output_filename: str | None = None,
 ) -> Path:
     data_dir = get_data_dir()
     if route_filename is None:
-        route_filename = f"{location}_optimized_route.json"
+        route_filename = f"{location}_baseline_route.json"
     if output_filename is None:
-        output_filename = f"{location}_cycle_optimized.yaml"
+        output_filename = f"{location}_cycle_baseline.yaml"
     route_path = data_dir / route_filename
-    expected_weights = {"energy": 5.0, "time": 1.0}
+    expected_weights = {"energy": 0.0, "time": 1.0}
     if route_path.exists():
         route_data = load_optimized_route(route_filename)
         if _needs_route_refresh(route_data, expected_weights):
@@ -114,7 +114,7 @@ def generate_london_osm_cycle_optimized(
     total_distance_m = float(sum(segment_lengths))
     duration_s = float(t[-1]) if len(t) else 0.0
 
-    road_names = route_data.get("road_names") or ["Optimized Route"]
+    road_names = route_data.get("road_names") or ["Baseline Route"]
     route_json = {
         "features": [
             {
@@ -134,8 +134,8 @@ def generate_london_osm_cycle_optimized(
         [
             {
                 "filename": str(output_path),
-                "name": "london_osm_urban_optimized",
-                "description": "Optimized OSM route with the same urban speed/grade model.",
+                "name": "london_osm_urban_baseline",
+                "description": "Baseline OSM route weighted entirely on time.",
                 "t": t,
                 "speed": speed,
                 "grade": grade,
@@ -155,9 +155,9 @@ def generate_london_osm_cycle_optimized(
 # ==============================================================
 # How to run
 # ==============================================================
-# python src/generate_london_osm_cycle_optimized.py
+# python src/generate_london_osm_cycle_baseline.py
 
 
 if __name__ == "__main__":
-    output = generate_london_osm_cycle_optimized()
-    print(f"Saved optimized cycle → {output}")
+    output = generate_london_osm_cycle_baseline()
+    print(f"Saved baseline cycle → {output}")
