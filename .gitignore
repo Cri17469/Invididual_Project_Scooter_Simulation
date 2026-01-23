@@ -31,7 +31,8 @@ build/
 .env.local
 
 # Data files
-
+data/*
+!data/.gitkeep
 
 # Cache files
 cache/*
