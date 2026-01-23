@@ -15,11 +15,15 @@ wait_for_file() {
 }
 
 rm -f "${data_dir}"/*
+echo "Cleared data directory: ${data_dir}"
 
+echo "Generating baseline route..."
 python "${repo_root}/src/generate_london_osm_cycle_baseline.py"
 wait_for_file "${baseline_output}"
 
+echo "Generating optimized route..."
 python "${repo_root}/src/generate_london_osm_cycle_optimized.py"
 wait_for_file "${optimized_output}"
 
+echo "Running the results output script..."
 python "${repo_root}/src/main.py"
