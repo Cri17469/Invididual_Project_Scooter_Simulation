@@ -15,3 +15,17 @@ def get_data_dir() -> Path:
     except Exception as e:
         print(f"[Error] Unable to resolve data path: {e}")
         raise
+
+def get_params_dir() -> Path:
+    """
+    Automatically resolve the vehicle parameters directory (inside data).
+    """
+    try:
+        data_dir = get_data_dir()
+        params_dir = data_dir / "vehicle_params"
+        if not params_dir.exists():
+            raise FileNotFoundError(f"Vehicle parameters folder not found: {params_dir}")
+        return params_dir
+    except Exception as e:
+        print(f"[Error] Unable to resolve vehicle parameters path: {e}")
+        raise

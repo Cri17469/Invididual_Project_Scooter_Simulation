@@ -9,7 +9,7 @@ import requests
 from shapely.geometry import Point
 
 
-from utils import get_data_dir
+from utils import get_data_dir, get_params_dir
 from vehicle_params import load_vehicle_params
 
 # ==============================================================
@@ -119,7 +119,7 @@ def _ensure_edge_grades(
     if any("elevation" not in data for _, data in graph.nodes(data=True)):
         _fetch_node_elevations(graph)
     ox.add_edge_grades(graph, add_absolute=True)
-    data_dir = get_data_dir()
+    data_dir = get_params_dir()
     graph_path = data_dir / graph_filename
     ox.save_graphml(graph, graph_path)
 
@@ -139,7 +139,7 @@ def build_graph(
     graph_filename: str = DEFAULT_GRAPH_FILENAME,
     use_cache: bool = True,
 ) -> nx.MultiDiGraph:
-    data_dir = get_data_dir()
+    data_dir = get_params_dir()
     graph_path = data_dir / graph_filename
 
     if use_cache and graph_path.exists():
@@ -318,7 +318,7 @@ def optimize_route(
 
 
 def save_optimized_route(route_data: dict, filename: str = DEFAULT_ROUTE_FILENAME) -> Path:
-    data_dir = get_data_dir()
+    data_dir = get_params_dir()
     output_path = data_dir / filename
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(route_data, f, indent=2)
@@ -326,7 +326,7 @@ def save_optimized_route(route_data: dict, filename: str = DEFAULT_ROUTE_FILENAM
 
 
 def load_optimized_route(filename: str = DEFAULT_ROUTE_FILENAME) -> dict:
-    data_dir = get_data_dir()
+    data_dir = get_params_dir()
     input_path = data_dir / filename
     if not input_path.exists():
         raise FileNotFoundError(f"Optimized route not found: {input_path}")

@@ -1,7 +1,7 @@
 import yaml
 from dataclasses import dataclass
 from pathlib import Path
-from utils import get_data_dir
+from utils import get_data_dir , get_params_dir
 
 
 @dataclass
@@ -26,7 +26,7 @@ def load_vehicle_params(filename: str = "scooter_params.yaml") -> VehicleParams:
     """
     Load vehicle parameters from the data/ directory.
     """
-    data_dir = get_data_dir()
+    data_dir = get_params_dir()
     file_path = data_dir / filename
 
     try:

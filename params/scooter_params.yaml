@@ -1,0 +1,30 @@
+# Scooter Parameters Configuration
+# The following parameters are based on the specification of Xiaomi Electric Scooter 4 Pro 
+vehicle:
+  mass_kg: 17 # [1]
+  wheel_radius_m: 0.240 # [1]
+  CdA_m2: 0.4
+  Cr: 0.024
+
+driver:
+  mass_kg: 75
+
+motor:
+  efficiency: 0.88
+  regen_efficiency: 0.45
+  T_drive_max_Nm: 45
+  T_regen_max_Nm: 25
+
+battery:
+  nominal_voltage_V: 36 # [1] Typical 10S configuration
+  capacity_Wh: 446 # [1]
+  charge_power_limit_W: 1200
+  discharge_power_limit_W: 3000
+  initial_soc: 0.9
+
+environment:
+  air_density: 1.2
+  gravity: 9.81
+
+# References:
+# [1] Xiaomi Electric Scooter 4 Pro Specifications
