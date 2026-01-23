@@ -5,20 +5,20 @@ from typing import Iterable
 
 import networkx as nx
 import osmnx as ox
+import numpy as np
 import requests
 from shapely.geometry import Point
 
 
+from energy_model import simulate_energy
 from utils import get_data_dir
-from vehicle_params import load_vehicle_params
+from vehicle_params import load_vehicle_params, VehicleParams
 
 # ==============================================================
 # Config
 # ==============================================================
 
 MAX_SPEED_KMH = 25.0
-DEFAULT_REGEN_EFFICIENCY = load_vehicle_params().eta_regen
-DEFAULT_GRADE_ENERGY_PER_PERCENT = 10.0  # Wh per km per percent grade
 DEFAULT_WEIGHTS = {
     "energy": 5.0,
     "time": 1.0,
@@ -73,24 +73,26 @@ def _normalize_speed_kph(speed_value: float | str | list | None, fallback: float
         return fallback
 
 
-def estimate_energy_wh(
+def simulate_edge_energy_wh(
     length_m: float,
     speed_kph: float,
-    max_speed_kmh: float,
-    grade_percent: float = 0.0,
-    regen_efficiency: float = DEFAULT_REGEN_EFFICIENCY,
-    grade_energy_per_percent: float = DEFAULT_GRADE_ENERGY_PER_PERCENT,
+    grade_percent: float,
+    params: VehicleParams,
 ) -> float:
-    length_km = length_m / 1000.0
-    base_wh_per_km = 12.0
-    aero_factor = 8.0
-    speed_factor = (speed_kph / max_speed_kmh) ** 2 if max_speed_kmh > 0 else 1.0
-    wh_per_km = base_wh_per_km + aero_factor * speed_factor
-    grade_wh_per_km = grade_energy_per_percent * grade_percent
-    if grade_wh_per_km < 0:
-        grade_wh_per_km *= (1.0 - regen_efficiency)
-    wh_per_km = max(wh_per_km + grade_wh_per_km, 0.0)
-    return length_km * wh_per_km
+    if length_m <= 0.0 or speed_kph <= 0.0:
+        return 0.0
+    time_s = length_m / (speed_kph / 3.6)
+    steps = max(int(round(time_s)) + 1, 2)
+    t = np.linspace(0.0, time_s, steps)
+    v = np.full_like(t, speed_kph / 3.6)
+    theta = np.full_like(t, np.arctan(grade_percent / 100.0))
+    cycle = {
+        "t": t,
+        "v": v,
+        "theta": theta,
+    }
+    result = simulate_energy(cycle, params, plot=False)
+    return max(float(result["E_Wh"]), 0.0)
 
 
 def _fetch_node_elevations(graph: nx.MultiDiGraph, chunk_size: int = 80, pause_s: float = 0.2) -> None:
@@ -180,6 +182,7 @@ def optimize_route(
     resolved_origin = resolve_location(origin)
     resolved_destination = resolve_location(destination)
     weights = weights or DEFAULT_WEIGHTS
+    params = load_vehicle_params()
 
 
     def nearest_node_fallback(graph: nx.MultiDiGraph, x: float, y: float) -> int:
@@ -242,12 +245,7 @@ def optimize_route(
         speed_kph = min(speed_kph, max_speed_kmh)
         time_s = length_m / (speed_kph / 3.6) if speed_kph > 0 else 0.0
         grade_percent = _extract_grade_percent(data)
-        energy_wh = estimate_energy_wh(
-            length_m,
-            speed_kph,
-            max_speed_kmh,
-            grade_percent=grade_percent,
-        )
+        energy_wh = simulate_edge_energy_wh(length_m, speed_kph, grade_percent, params)
         data["cost"] = weights.get("energy", 1.0) * energy_wh + weights.get("time", 1.0) * time_s
         data["energy_est_Wh"] = energy_wh
         data["time_est_s"] = time_s

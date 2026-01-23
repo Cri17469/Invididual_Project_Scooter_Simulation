@@ -11,14 +11,14 @@ driver:
 
 motor:
   efficiency: 0.88
-  regen_efficiency: 0.45
+  regen_efficiency: 0.5
   T_drive_max_Nm: 45
   T_regen_max_Nm: 25
 
 battery:
   nominal_voltage_V: 36 # [1] Typical 10S configuration
   capacity_Wh: 446 # [1]
-  charge_power_limit_W: 1200
+  charge_power_limit_W: 1500
   discharge_power_limit_W: 3000
   initial_soc: 0.9
 
