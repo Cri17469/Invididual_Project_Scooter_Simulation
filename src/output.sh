@@ -14,6 +14,7 @@ wait_for_file() {
   done
 }
 
+mkdir -p "${data_dir}"
 rm -f "${data_dir}"/*
 echo "Cleared data directory: ${data_dir}"
 
