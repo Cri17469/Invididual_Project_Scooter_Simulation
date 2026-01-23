@@ -1,0 +1,3 @@
+label,total_energy_consumed_Wh,energy_recovered_Wh,net_energy_Wh,wh_per_km,trip_time_s,distance_km,net_energy_improvement_percent,wh_per_km_improvement_percent
+london_osm_urban_baseline (baseline),45.533936228969665,3.2255652747671992,42.308370954202466,8.637354152015396,1068.7760384067224,4.898302212643492,0.0,0.0
+london_osm_urban_optimized (optimized),48.92149007383854,3.893706555428541,45.02778351841,9.256720198887615,2370.1000044118646,4.86433451059923,-6.427599321068667,-7.170784432032344
