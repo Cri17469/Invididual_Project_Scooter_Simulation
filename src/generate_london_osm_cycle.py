@@ -172,7 +172,15 @@ def compute_grade(elevation, lat, lon):
 # 4b. Derive realistic time stamps from geometry + speed
 # ==============================================================
 
-def compute_time_from_geometry(lat, lon, speed_kmh, min_speed_kmh: float = 1.0):
+def compute_time_from_geometry(
+    lat,
+    lon,
+    speed_kmh,
+    min_speed_kmh: float = 4.0,
+    stop_speed_kmh: float = 0.5,
+    stop_duration_s: float = 5.0,
+    max_segment_time_s: float = 30.0,
+):
     """Accumulate elapsed time using segment lengths and local speed.
 
     Parameters
@@ -183,7 +191,15 @@ def compute_time_from_geometry(lat, lon, speed_kmh, min_speed_kmh: float = 1.0):
         Speed profile (km/h) aligned with the coordinate samples.
     min_speed_kmh : float, optional
         Floor applied when averaging segment speeds to avoid division by zero
-        during stops; defaults to 1 km/h.
+        during slow movement; defaults to 4 km/h.
+    stop_speed_kmh : float, optional
+        Threshold (km/h) below which both endpoints are treated as a stop.
+    stop_duration_s : float, optional
+        Time to allocate to each stop segment when both endpoints are at
+        or below the stop speed threshold.
+    max_segment_time_s : float, optional
+        Upper bound for segment traversal time to avoid unrealistically long
+        dwell periods due to very low speeds or long geometry segments.
 
     Returns
     -------
@@ -207,10 +223,15 @@ def compute_time_from_geometry(lat, lon, speed_kmh, min_speed_kmh: float = 1.0):
         c = 2 * np.arcsin(np.sqrt(a))
         dx = 6371000 * c  # meters
 
-        seg_speed_kmh = max(np.mean([speed_kmh[i - 1], speed_kmh[i]]), min_speed_kmh)
-        seg_speed_ms = seg_speed_kmh / 3.6
-
-        dt = dx / seg_speed_ms if seg_speed_ms > 0 else 0.0
+        prev_speed = float(speed_kmh[i - 1])
+        next_speed = float(speed_kmh[i])
+        if prev_speed <= stop_speed_kmh and next_speed <= stop_speed_kmh:
+            dt = stop_duration_s
+        else:
+            seg_speed_kmh = max(np.mean([prev_speed, next_speed]), min_speed_kmh)
+            seg_speed_ms = seg_speed_kmh / 3.6
+            dt = dx / seg_speed_ms if seg_speed_ms > 0 else 0.0
+            dt = min(dt, max_segment_time_s)
         t[i] = t[i - 1] + dt
 
     return t
