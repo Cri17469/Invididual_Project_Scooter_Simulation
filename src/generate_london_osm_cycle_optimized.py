@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
+from config import DEFAULT_LOCATION, DEFAULT_ROUTE_DESTINATION, DEFAULT_ROUTE_ORIGIN
 from energy_model import simulate_energy
 from generate_london_osm_cycle import (
     apply_urban_events,
@@ -24,9 +25,6 @@ from vehicle_params import load_vehicle_params
 # ==============================================================
 # Config
 # ==============================================================
-
-DEFAULT_LOCATION = "London"
-
 
 # ==============================================================
 # Helpers
@@ -134,15 +132,15 @@ def generate_london_osm_cycle_optimized(
         route_data = load_optimized_route(route_filename)
         if _needs_route_refresh(route_data, expected_weights):
             route_data = optimize_route(
-                origin=(51.5565, -0.1646),
-                destination=(51.5943, -0.1302),
+                origin=DEFAULT_ROUTE_ORIGIN,
+                destination=DEFAULT_ROUTE_DESTINATION,
                 weights=expected_weights,
             )
             save_optimized_route(route_data, route_filename)
     else:
         route_data = optimize_route(
-            origin=(51.5565, -0.1646),
-            destination=(51.5943, -0.1302),
+            origin=DEFAULT_ROUTE_ORIGIN,
+            destination=DEFAULT_ROUTE_DESTINATION,
             weights=expected_weights,
         )
         save_optimized_route(route_data, route_filename)

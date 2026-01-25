@@ -7,6 +7,7 @@ import requests
 import time
 import openrouteservice as ors
 
+from config import DEFAULT_ROUTE_DESTINATION, DEFAULT_ROUTE_ORIGIN
 
 # ==============================================================
 # 1. Get real OSM route using OpenRouteService
@@ -345,14 +346,14 @@ def save_cycle_yaml(cycles):
 # ==============================================================
 
 def generate_london_osm_cycle(api_key: str | None = None):
-    # Example route: UCL → Waterloo
-    start = (51.5246, -0.1340)  # UCL
-    end   = (51.5033, -0.1133)  # Waterloo Station
-
     ORS_API_KEY = resolve_ors_api_key(api_key)
 
     # 1. Get OSM route + geometry
-    lat, lon, route_json = fetch_osm_route(start, end, ORS_API_KEY)
+    lat, lon, route_json = fetch_osm_route(
+        DEFAULT_ROUTE_ORIGIN,
+        DEFAULT_ROUTE_DESTINATION,
+        ORS_API_KEY,
+    )
 
     # 2. Extract metadata
     road_names = extract_road_names(route_json)
