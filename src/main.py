@@ -10,6 +10,7 @@ from utils import get_data_dir
 from vehicle_params import load_vehicle_params
 
 
+DEFAULT_LOCATION = "London"
 BASELINE_CYCLE_FILENAME = "London_cycle_baseline.yaml"
 OPTIMIZED_CYCLE_FILENAME = "London_cycle_optimized.yaml"
 PARAMS_FILENAME = "scooter_params.yaml"
@@ -158,11 +159,31 @@ def plot_route_comparison(
     plt.show()
 
 
-def main():
+def resolve_cycle_filenames(
+    location: str,
+    baseline_cycle_filename: str | None = None,
+    optimized_cycle_filename: str | None = None,
+) -> tuple[str, str]:
+    baseline = baseline_cycle_filename or f"{location}_cycle_baseline.yaml"
+    optimized = optimized_cycle_filename or f"{location}_cycle_optimized.yaml"
+    return baseline, optimized
+
+
+def main(
+    location: str = DEFAULT_LOCATION,
+    baseline_cycle_filename: str | None = None,
+    optimized_cycle_filename: str | None = None,
+    params_filename: str = PARAMS_FILENAME,
+) -> None:
+    baseline_filename, optimized_filename = resolve_cycle_filenames(
+        location,
+        baseline_cycle_filename=baseline_cycle_filename,
+        optimized_cycle_filename=optimized_cycle_filename,
+    )
     try:
-        baseline_cycle = load_drive_cycle(BASELINE_CYCLE_FILENAME)
-        optimized_cycle = load_drive_cycle(OPTIMIZED_CYCLE_FILENAME)
-        params = load_vehicle_params(PARAMS_FILENAME)
+        baseline_cycle = load_drive_cycle(baseline_filename)
+        optimized_cycle = load_drive_cycle(optimized_filename)
+        params = load_vehicle_params(params_filename)
 
         baseline_result = simulate_energy(baseline_cycle, params, plot=PLOT_ENERGY_TRACES)
         optimized_result = simulate_energy(optimized_cycle, params, plot=PLOT_ENERGY_TRACES)
@@ -205,11 +226,25 @@ def main():
         if PLOT_COMPARISON:
             plot_comparison_summary([baseline_summary, optimized_summary])
         if PLOT_ROUTES:
-            plot_route_comparison(BASELINE_CYCLE_FILENAME, OPTIMIZED_CYCLE_FILENAME)
+            plot_route_comparison(baseline_filename, optimized_filename)
 
     except Exception as e:
         print(f"[Fatal error] Simulation failed: {e}")
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Compare baseline and optimized drive cycles.")
+    parser.add_argument("--location", default=DEFAULT_LOCATION, help="Location label for cycle filenames.")
+    parser.add_argument("--baseline-cycle", dest="baseline_cycle", help="Baseline cycle YAML filename.")
+    parser.add_argument("--optimized-cycle", dest="optimized_cycle", help="Optimized cycle YAML filename.")
+    parser.add_argument("--params", dest="params_filename", default=PARAMS_FILENAME, help="Vehicle params YAML.")
+    args = parser.parse_args()
+
+    main(
+        location=args.location,
+        baseline_cycle_filename=args.baseline_cycle,
+        optimized_cycle_filename=args.optimized_cycle,
+        params_filename=args.params_filename,
+    )
