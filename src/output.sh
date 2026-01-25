@@ -3,14 +3,15 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 data_dir="${repo_root}/data"
-baseline_output="${data_dir}/London_cycle_baseline.yaml"
-optimized_output="${data_dir}/London_cycle_optimized.yaml"
+location="Paris"
+baseline_output="${data_dir}/${location}_cycle_baseline.yaml"
+optimized_output="${data_dir}/${location}_cycle_optimized.yaml"
 
 wait_for_file() {
   local file_path="$1"
   while [[ ! -s "${file_path}" ]]; do
     echo "Waiting for ${file_path} to be ready..."
-    sleep 10
+    sleep 1
   done
 }
 
@@ -19,12 +20,20 @@ rm -f "${data_dir}"/*
 echo "Cleared data directory: ${data_dir}"
 
 echo "Generating baseline route..."
-python "${repo_root}/src/generate_london_osm_cycle_baseline.py"
+python - <<PY
+from generate_london_osm_cycle_baseline import generate_london_osm_cycle_baseline
+generate_london_osm_cycle_baseline(location="${location}")
+PY
 wait_for_file "${baseline_output}"
 
 echo "Generating optimized route..."
-python "${repo_root}/src/generate_london_osm_cycle_optimized.py"
+python - <<PY
+from generate_london_osm_cycle_optimized import generate_london_osm_cycle_optimized
+generate_london_osm_cycle_optimized(location="${location}")
+PY
 wait_for_file "${optimized_output}"
 
 echo "Running the results output script..."
-python "${repo_root}/src/main.py"
+python "${repo_root}/src/main.py" --location "${location}"
+
+echo "Task completed. Detailed results are available in ${baseline_output} and ${optimized_output}."
