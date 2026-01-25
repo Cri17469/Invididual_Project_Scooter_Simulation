@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from pathlib import Path
 from typing import Iterable
@@ -7,6 +8,7 @@ import networkx as nx
 import osmnx as ox
 import numpy as np
 import requests
+import openrouteservice as ors
 from shapely.geometry import Point
 
 
@@ -36,6 +38,13 @@ DEFAULT_ROUTE_FILENAME = "optimized_route.json"
 
 def resolve_location(location: str | tuple[float, float] | list[float]) -> tuple[float, float]:
     if isinstance(location, str):
+        ors_api_key = _resolve_ors_api_key()
+        if ors_api_key:
+            try:
+                lat, lon = _geocode_with_ors(location, ors_api_key)
+                return float(lat), float(lon)
+            except (ValueError, ors.exceptions.ApiError, requests.RequestException):
+                pass
         lat, lon = ox.geocode(location)
         return float(lat), float(lon)
 
@@ -43,6 +52,48 @@ def resolve_location(location: str | tuple[float, float] | list[float]) -> tuple
         return float(location[0]), float(location[1])
 
     raise ValueError("Location must be a place name string or (lat, lon) tuple.")
+
+
+def _read_api_key_from_env_file(var_name: str, env_filename: str = ".env") -> str | None:
+    env_path = Path(__file__).resolve().parent.parent / env_filename
+    if not env_path.exists():
+        return None
+
+    try:
+        with open(env_path, "r", encoding="utf-8") as env_file:
+            for raw_line in env_file:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                name, value = line.split("=", 1)
+                if name.strip() == var_name:
+                    return value.strip().strip('"').strip("'")
+    except OSError:
+        return None
+
+    return None
+
+
+def _resolve_ors_api_key() -> str | None:
+    api_key = os.getenv("ORS_API_KEY")
+    if api_key:
+        return api_key
+    return _read_api_key_from_env_file("ORS_API_KEY")
+
+
+def _geocode_with_ors(location: str, api_key: str) -> tuple[float, float]:
+    client = ors.Client(key=api_key)
+    response = client.pelias_search(text=location)
+    features = response.get("features", [])
+    if not features:
+        raise ValueError("OpenRouteService did not return any geocoding results.")
+    coordinates = features[0].get("geometry", {}).get("coordinates")
+    if not coordinates or len(coordinates) < 2:
+        raise ValueError("OpenRouteService response missing coordinates.")
+    lon, lat = coordinates[:2]
+    return float(lat), float(lon)
 
 
 def _bbox_from_points(points: Iterable[tuple[float, float]], buffer_m: float) -> tuple[float, float, float, float]:
