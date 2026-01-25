@@ -20,17 +20,11 @@ rm -f "${data_dir}"/*
 echo "Cleared data directory: ${data_dir}"
 
 echo "Generating baseline route..."
-python - <<PY
-from generate_london_osm_cycle_baseline import generate_london_osm_cycle_baseline
-generate_london_osm_cycle_baseline(location="${location}")
-PY
+python "${repo_root}/src/generate_london_osm_cycle_baseline.py" --location "${location}"
 wait_for_file "${baseline_output}"
 
 echo "Generating optimized route..."
-python - <<PY
-from generate_london_osm_cycle_optimized import generate_london_osm_cycle_optimized
-generate_london_osm_cycle_optimized(location="${location}")
-PY
+python "${repo_root}/src/generate_london_osm_cycle_optimized.py" --location "${location}"
 wait_for_file "${optimized_output}"
 
 echo "Running the results output script..."
