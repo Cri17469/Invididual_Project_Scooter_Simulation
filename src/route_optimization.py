@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from pathlib import Path
 from typing import Iterable
@@ -27,6 +28,48 @@ DEFAULT_NETWORK_TYPE = "bike"
 DEFAULT_BUFFER_M = 3000
 DEFAULT_GRAPH_FILENAME = "london_osm_graph.graphml"
 DEFAULT_ROUTE_FILENAME = "optimized_route.json"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _read_api_key_from_env_file(var_name: str, env_filename: str = ".env") -> str | None:
+    """Return the first matching key from a simple KEY=VALUE .env style file."""
+    env_path = PROJECT_ROOT / env_filename
+    if not env_path.exists():
+        return None
+
+    try:
+        with open(env_path, "r", encoding="utf-8") as env_file:
+            for raw_line in env_file:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                name, value = line.split("=", 1)
+                if name.strip() == var_name:
+                    return value.strip().strip('"').strip("'")
+    except OSError:
+        # Best-effort only; caller decides how to proceed.
+        return None
+
+    return None
+
+
+def resolve_ors_api_key(explicit_key: str | None = None, required: bool = False) -> str | None:
+    """Resolve the OpenRouteService API key from the caller/env/.env file."""
+    if explicit_key:
+        return explicit_key
+
+    api_key = os.getenv("ORS_API_KEY")
+    if not api_key:
+        api_key = _read_api_key_from_env_file("ORS_API_KEY")
+
+    if required and not api_key:
+        raise EnvironmentError(
+            "Missing OpenRouteService API key. Set ORS_API_KEY in the environment or .env file."
+        )
+
+    return api_key
 
 
 # ==============================================================
@@ -95,19 +138,63 @@ def simulate_edge_energy_wh(
     return max(float(result["E_Wh"]), 0.0)
 
 
-def _fetch_node_elevations(graph: nx.MultiDiGraph, chunk_size: int = 80, pause_s: float = 0.2) -> None:
+def _parse_ors_elevations(payload: dict) -> list[float]:
+    """Extract elevations from an OpenRouteService elevation response."""
+    if "geometry" in payload and isinstance(payload["geometry"], list):
+        return [
+            float(point[2])
+            for point in payload["geometry"]
+            if isinstance(point, (list, tuple)) and len(point) >= 3
+        ]
+    if "features" in payload:
+        elevations: list[float] = []
+        for feature in payload.get("features", []):
+            geometry = feature.get("geometry", {})
+            coords = geometry.get("coordinates", [])
+            for point in coords:
+                if isinstance(point, (list, tuple)) and len(point) >= 3:
+                    elevations.append(float(point[2]))
+        return elevations
+    return []
+
+
+def _fetch_node_elevations(
+    graph: nx.MultiDiGraph,
+    chunk_size: int = 80,
+    pause_s: float = 0.2,
+    ors_api_key: str | None = None,
+) -> None:
     nodes = list(graph.nodes(data=True))
     coords = [(node_id, data.get("y"), data.get("x")) for node_id, data in nodes]
     for i in range(0, len(coords), chunk_size):
         chunk = coords[i:i + chunk_size]
-        locations = "|".join([f"{lat},{lon}" for _, lat, lon in chunk])
-        url = f"https://api.open-elevation.com/api/v1/lookup?locations={locations}"
         try:
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            for (node_id, _, _), result in zip(chunk, data.get("results", []), strict=False):
-                graph.nodes[node_id]["elevation"] = float(result.get("elevation", 0.0))
+            if ors_api_key:
+                url = "https://api.openrouteservice.org/elevation/point"
+                payload = {
+                    "format_in": "point",
+                    "format_out": "point",
+                    "geometry": [[lon, lat] for _, lat, lon in chunk],
+                }
+                response = requests.post(
+                    url,
+                    json=payload,
+                    headers={"Authorization": ors_api_key},
+                    timeout=30,
+                )
+                response.raise_for_status()
+                data = response.json()
+                elevations = _parse_ors_elevations(data)
+                for (node_id, _, _), elevation in zip(chunk, elevations, strict=False):
+                    graph.nodes[node_id]["elevation"] = float(elevation)
+            else:
+                locations = "|".join([f"{lat},{lon}" for _, lat, lon in chunk])
+                url = f"https://api.open-elevation.com/api/v1/lookup?locations={locations}"
+                response = requests.get(url, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                for (node_id, _, _), result in zip(chunk, data.get("results", []), strict=False):
+                    graph.nodes[node_id]["elevation"] = float(result.get("elevation", 0.0))
         except requests.RequestException:
             for node_id, _, _ in chunk:
                 graph.nodes[node_id]["elevation"] = 0.0
@@ -117,9 +204,10 @@ def _fetch_node_elevations(graph: nx.MultiDiGraph, chunk_size: int = 80, pause_s
 def _ensure_edge_grades(
     graph: nx.MultiDiGraph,
     graph_filename: str = DEFAULT_GRAPH_FILENAME,
+    ors_api_key: str | None = None,
 ) -> None:
     if any("elevation" not in data for _, data in graph.nodes(data=True)):
-        _fetch_node_elevations(graph)
+        _fetch_node_elevations(graph, ors_api_key=ors_api_key)
     ox.add_edge_grades(graph, add_absolute=True)
     data_dir = get_data_dir()
     graph_path = data_dir / graph_filename
@@ -178,11 +266,13 @@ def optimize_route(
     network_type: str = DEFAULT_NETWORK_TYPE,
     buffer_m: float = DEFAULT_BUFFER_M,
     graph_filename: str = DEFAULT_GRAPH_FILENAME,
+    ors_api_key: str | None = None,
 ) -> dict:
     resolved_origin = resolve_location(origin)
     resolved_destination = resolve_location(destination)
     weights = weights or DEFAULT_WEIGHTS
     params = load_vehicle_params()
+    ors_api_key = resolve_ors_api_key(ors_api_key, required=False)
 
 
     def nearest_node_fallback(graph: nx.MultiDiGraph, x: float, y: float) -> int:
@@ -236,7 +326,7 @@ def optimize_route(
         buffer_m=buffer_m,
         graph_filename=graph_filename,
     )
-    _ensure_edge_grades(graph, graph_filename=graph_filename)
+    _ensure_edge_grades(graph, graph_filename=graph_filename, ors_api_key=ors_api_key)
     graph_proj, origin_node, destination_node = resolve_nodes(graph)
 
     for u, v, k, data in graph_proj.edges(keys=True, data=True):
@@ -311,6 +401,7 @@ def optimize_route(
             "weights": weights,
             "max_speed_kmh": max_speed_kmh,
             "network_type": network_type,
+            "ors_api_key_configured": bool(ors_api_key),
         },
     }
 
