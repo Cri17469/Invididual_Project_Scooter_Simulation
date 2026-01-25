@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 data_dir="${repo_root}/data"
-location="Paris"
+location="Hampstead-AlexandraPalace"
 baseline_output="${data_dir}/${location}_cycle_baseline.yaml"
 optimized_output="${data_dir}/${location}_cycle_optimized.yaml"
 
