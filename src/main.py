@@ -4,13 +4,13 @@ from pathlib import Path
 
 import yaml
 
+from config import DEFAULT_LOCATION
 from cycle_loader import load_drive_cycle
 from energy_model import simulate_energy
 from utils import get_data_dir
 from vehicle_params import load_vehicle_params
 
 
-DEFAULT_LOCATION = "London"
 BASELINE_CYCLE_FILENAME = "London_cycle_baseline.yaml"
 OPTIMIZED_CYCLE_FILENAME = "London_cycle_optimized.yaml"
 PARAMS_FILENAME = "scooter_params.yaml"
