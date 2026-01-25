@@ -1,3 +1,4 @@
+import argparse
 from math import isclose
 from pathlib import Path
 
@@ -207,5 +208,26 @@ def generate_london_osm_cycle_optimized(
 
 
 if __name__ == "__main__":
-    output = generate_london_osm_cycle_optimized()
+    parser = argparse.ArgumentParser(description="Generate the optimized OSM cycle output.")
+    parser.add_argument(
+        "--location",
+        default=DEFAULT_LOCATION,
+        help="Location tag used in filenames.",
+    )
+    parser.add_argument(
+        "--route-filename",
+        default=None,
+        help="Override the cached optimized route filename.",
+    )
+    parser.add_argument(
+        "--output-filename",
+        default=None,
+        help="Override the optimized output YAML filename.",
+    )
+    args = parser.parse_args()
+    output = generate_london_osm_cycle_optimized(
+        location=args.location,
+        route_filename=args.route_filename,
+        output_filename=args.output_filename,
+    )
     print(f"Saved optimized cycle → {output}")

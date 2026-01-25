@@ -1,3 +1,4 @@
+import argparse
 from math import isclose
 from pathlib import Path
 
@@ -207,5 +208,26 @@ def generate_london_osm_cycle_baseline(
 
 
 if __name__ == "__main__":
-    output = generate_london_osm_cycle_baseline()
+    parser = argparse.ArgumentParser(description="Generate the baseline OSM cycle output.")
+    parser.add_argument(
+        "--location",
+        default=DEFAULT_LOCATION,
+        help="Location tag used in filenames.",
+    )
+    parser.add_argument(
+        "--route-filename",
+        default=None,
+        help="Override the cached baseline route filename.",
+    )
+    parser.add_argument(
+        "--output-filename",
+        default=None,
+        help="Override the baseline output YAML filename.",
+    )
+    args = parser.parse_args()
+    output = generate_london_osm_cycle_baseline(
+        location=args.location,
+        route_filename=args.route_filename,
+        output_filename=args.output_filename,
+    )
     print(f"Saved baseline cycle → {output}")
