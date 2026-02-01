@@ -32,6 +32,7 @@ def summarize_result(label: str, cycle: dict, result: dict) -> dict:
         "total_energy_consumed_Wh": total_consumed_Wh,
         "energy_recovered_Wh": energy_recovered_Wh,
         "net_energy_Wh": net_energy_Wh,
+        "undulation_Wh": float(result["undulation_Wh"]),
         "wh_per_km": float(result["Wh_per_km"]),
         "trip_time_s": trip_time_s,
         "distance_km": float(result["distance_km"]),
@@ -73,6 +74,7 @@ def print_summary(summary: dict) -> None:
         f"Trip time: {summary['trip_time_s'] / 60:.1f} min | "
         f"Distance: {summary['distance_km']:.2f} km"
     )
+    print(f"Energy loading (undulation): {summary['undulation_Wh']:.1f} Wh")
 
 
 def plot_comparison_summary(summaries: list[dict]) -> None:

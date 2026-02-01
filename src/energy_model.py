@@ -69,10 +69,12 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
     grade_power = F_grade * v
     grade_assist_Wh = signed_energy(np.where(grade_power < 0, -grade_power, 0.0))
     grade_work_Wh = signed_energy(grade_power)
+    grade_undulation_Wh = signed_energy(np.abs(grade_power))
 
     component_energy_Wh = {
         "inertial": positive_energy(F_inert * v),
         "grade": positive_energy(grade_power),
+        "undulation": grade_undulation_Wh,
         "rolling": positive_energy(F_roll * v),
         "aerodynamic": positive_energy(F_aero * v),
     }
@@ -154,5 +156,6 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
         "component_energy_Wh": component_energy_Wh,
         "grade_work_Wh": grade_work_Wh,
         "grade_assist_Wh": grade_assist_Wh,
+        "undulation_Wh": grade_undulation_Wh,
         "total_mass_kg": total_mass,
     }
