@@ -26,6 +26,13 @@ def summarize_result(label: str, cycle: dict, result: dict) -> dict:
     energy_recovered_Wh = float(result["E_regen_Wh"])
     net_energy_Wh = float(result["E_Wh"])
     total_consumed_Wh = net_energy_Wh + energy_recovered_Wh
+    component_energy = result.get("component_energy_Wh", {})
+    total_traction_Wh = sum(component_energy.values())
+    undulation_percent = (
+        float(result["undulation_Wh"]) / total_traction_Wh * 100.0
+        if total_traction_Wh
+        else 0.0
+    )
 
     return {
         "label": label,
@@ -33,6 +40,7 @@ def summarize_result(label: str, cycle: dict, result: dict) -> dict:
         "energy_recovered_Wh": energy_recovered_Wh,
         "net_energy_Wh": net_energy_Wh,
         "undulation_Wh": float(result["undulation_Wh"]),
+        "undulation_percent_total_traction": undulation_percent,
         "wh_per_km": float(result["Wh_per_km"]),
         "trip_time_s": trip_time_s,
         "distance_km": float(result["distance_km"]),
@@ -74,7 +82,11 @@ def print_summary(summary: dict) -> None:
         f"Trip time: {summary['trip_time_s'] / 60:.1f} min | "
         f"Distance: {summary['distance_km']:.2f} km"
     )
-    print(f"Energy loading (undulation): {summary['undulation_Wh']:.1f} Wh")
+    print(
+        "Energy loading (undulation): "
+        f"{summary['undulation_Wh']:.1f} Wh | "
+        f"Undulation share: {summary['undulation_percent_total_traction']:.1f}%"
+    )
 
 
 def plot_comparison_summary(summaries: list[dict]) -> None:
