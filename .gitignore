@@ -36,3 +36,6 @@ data/*
 
 # Cache files
 cache/*
+
+# Route Configuations
+src/config.py
