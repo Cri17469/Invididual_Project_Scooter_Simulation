@@ -39,3 +39,6 @@ cache/*
 
 # Route Configuations
 src/config.py
+
+# Analysis
+src/analysis.py
