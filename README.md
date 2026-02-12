@@ -142,3 +142,64 @@ Regeneration is modelled in `simulate_energy` by:
 - `simulate_energy(cycle, params, plot=False)` → full dynamics + battery/regen + SoC (`src/energy_model.py`)
 - `load_vehicle_params(filename="scooter_params.yaml")` → reads battery/motor/environment parameters (`src/vehicle_params.py`)
 - `build_cycle(...)` and `main()` in `src/main.py` → build comparison cycles and call `simulate_energy` for baseline/optimized routes
+
+## 3) Analysis of the Time-Energy Weighted Routing Algorithm
+
+Your time-energy weighted logic is implemented in `optimize_route(...)` inside `src/route_optimization.py`, where each graph edge is assigned a scalar cost and Dijkstra-style shortest-path selection is performed with `nx.shortest_path(..., weight="cost")`.
+
+### Core optimization equation used in code
+
+For each edge `(u, v, k)`, the code computes:
+
+- `time_s = length_m / (speed_kph / 3.6)`
+- `energy_wh = simulate_edge_energy_wh(length_m, speed_kph, grade_percent, params)`
+- `cost = w_energy * energy_wh + w_time * time_s`
+
+with:
+
+- `w_energy = weights.get("energy", 1.0)`
+- `w_time = weights.get("time", 1.0)`
+
+This is a linear weighted-sum multi-objective model (energy + travel time) converted to one objective.
+
+### How edge energy is estimated (function chain)
+
+`simulate_edge_energy_wh(...)` builds a synthetic constant-speed edge cycle and reuses the same physics/energy model as your main simulation:
+
+1. Build edge-local cycle arrays:
+   - `t = np.linspace(0.0, time_s, steps)`
+   - `v = np.full_like(t, speed_kph / 3.6)`
+   - `theta = np.full_like(t, np.arctan(grade_percent / 100.0))`
+2. Call `simulate_energy(cycle, params, plot=False)`.
+3. Return `max(result["E_Wh"], 0.0)` so negative net edge energy is clipped to zero in routing cost.
+
+Interpretation: downhill/regen segments can reduce net pack energy in physics space, but the route cost model does not allow negative edge cost (avoids pathological “energy-harvesting loops” in shortest-path search).
+
+### Why this algorithm is practical
+
+- **Consistent physics basis**: routing energy uses the exact same `simulate_energy(...)` model as end-to-end cycle evaluation.
+- **Tunable behavior**: by changing `weights`, you smoothly shift between faster routes and lower-energy routes.
+- **Robust graph search**: once each edge has a single `cost`, standard shortest-path is stable and efficient.
+
+### Parameter and preprocessing effects on results
+
+- Speed used per edge is normalized by `_normalize_speed_kph(...)` and capped by `max_speed_kmh`, which directly affects both `time_s` and `energy_wh`.
+- Grade comes from `_extract_grade_percent(edge_data)`, so elevation quality/availability influences energy discrimination between routes.
+- If no path exists, `optimize_route(...)` retries with a larger graph buffer, then reruns shortest path.
+
+### Units and weighting caveat (important for essay discussion)
+
+Because the cost is `Wh` + `s` weighted by raw coefficients, the coefficients must also serve as **unit conversion/tradeoff scalers**. In other words, `w_energy` and `w_time` are not only “preferences”; they implicitly convert and balance two different units.
+
+A useful way to describe this in your essay:
+
+- increasing `w_time` biases toward shorter duration even if Wh rises,
+- increasing `w_energy` biases toward lower Wh even if travel time rises,
+- the numerical ratio `w_time / w_energy` determines the effective value of one second relative to one watt-hour in the optimizer.
+
+### Main functions to cite for this algorithm
+
+- `optimize_route(...)` (edge cost construction + shortest path)
+- `simulate_edge_energy_wh(...)` (edge-level physical energy estimate)
+- `_normalize_speed_kph(...)` and `_extract_grade_percent(...)` (edge attribute normalization)
+- `simulate_energy(...)` (physics + battery/regen backend reused by routing)
