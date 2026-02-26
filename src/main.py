@@ -51,6 +51,10 @@ def run_paired_simulations(
     speed_noise_std: float = 0.0,
     seed: int | None = None,
 ) -> dict:
+    baseline_total_energy_consumed_wh: list[float] = []
+    optimized_total_energy_consumed_wh: list[float] = []
+    baseline_regen_recovered_wh: list[float] = []
+    optimized_regen_recovered_wh: list[float] = []
     total_energy_consumed_diff_wh: list[float] = []
     regen_recovered_diff_wh: list[float] = []
     rng = np.random.default_rng(seed)
@@ -67,10 +71,19 @@ def run_paired_simulations(
         )
         regen_diff = float(baseline_result["E_regen_Wh"]) - float(optimized_result["E_regen_Wh"])
 
+        baseline_total_energy_consumed_wh.append(total_consumed_energy_wh(baseline_result))
+        optimized_total_energy_consumed_wh.append(total_consumed_energy_wh(optimized_result))
+        baseline_regen_recovered_wh.append(float(baseline_result["E_regen_Wh"]))
+        optimized_regen_recovered_wh.append(float(optimized_result["E_regen_Wh"]))
+
         total_energy_consumed_diff_wh.append(total_energy_diff)
         regen_recovered_diff_wh.append(regen_diff)
 
     return {
+        "baseline_total_energy_consumed_Wh": baseline_total_energy_consumed_wh,
+        "optimized_total_energy_consumed_Wh": optimized_total_energy_consumed_wh,
+        "baseline_regen_recovered_Wh": baseline_regen_recovered_wh,
+        "optimized_regen_recovered_Wh": optimized_regen_recovered_wh,
         "total_energy_consumed_diff_Wh": total_energy_consumed_diff_wh,
         "regen_recovered_diff_Wh": regen_recovered_diff_wh,
     }
@@ -123,8 +136,8 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=(
-            "Run paired baseline/optimized simulations and save only paired differences "
-            "for total consumed energy and regenerated energy."
+            "Run paired baseline/optimized simulations and save both per-run raw values "
+            "and paired differences for total consumed energy and regenerated energy."
         )
     )
     parser.add_argument("--location", default=DEFAULT_LOCATION, help="Location label for cycle filenames.")
