@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 
+import numpy as np
 import yaml
 
 from config import DEFAULT_LOCATION
@@ -29,19 +30,37 @@ def total_consumed_energy_wh(result: dict) -> float:
     return float(result["E_Wh"]) + float(result["E_regen_Wh"])
 
 
+def perturb_cycle_speed(cycle: dict, speed_noise_std: float, rng: np.random.Generator) -> dict:
+    """Return a copy of the cycle with Gaussian speed perturbation applied."""
+    if speed_noise_std <= 0.0:
+        return cycle
+
+    perturbed_cycle = dict(cycle)
+    speed = np.asarray(cycle["v"], dtype=float)
+    noise = rng.normal(loc=0.0, scale=speed_noise_std, size=speed.shape)
+    perturbed_cycle["v"] = np.clip(speed + noise, a_min=0.0, a_max=None)
+    return perturbed_cycle
+
+
 def run_paired_simulations(
     baseline_cycle: dict,
     optimized_cycle: dict,
     params,
     runs: int,
     plot: bool = False,
+    speed_noise_std: float = 0.0,
+    seed: int | None = None,
 ) -> dict:
     total_energy_consumed_diff_wh: list[float] = []
     regen_recovered_diff_wh: list[float] = []
+    rng = np.random.default_rng(seed)
 
     for _ in range(runs):
-        baseline_result = simulate_energy(baseline_cycle, params, plot=plot)
-        optimized_result = simulate_energy(optimized_cycle, params, plot=plot)
+        baseline_cycle_run = perturb_cycle_speed(baseline_cycle, speed_noise_std=speed_noise_std, rng=rng)
+        optimized_cycle_run = perturb_cycle_speed(optimized_cycle, speed_noise_std=speed_noise_std, rng=rng)
+
+        baseline_result = simulate_energy(baseline_cycle_run, params, plot=plot)
+        optimized_result = simulate_energy(optimized_cycle_run, params, plot=plot)
 
         total_energy_diff = total_consumed_energy_wh(baseline_result) - total_consumed_energy_wh(
             optimized_result
@@ -73,6 +92,8 @@ def main(
     runs: int = DEFAULT_RUNS,
     output_filename: str = OUTPUT_FILENAME,
     plot: bool = False,
+    speed_noise_std: float = 0.0,
+    seed: int | None = None,
 ) -> None:
     baseline_filename, optimized_filename = resolve_cycle_filenames(
         location,
@@ -90,6 +111,8 @@ def main(
         params=params,
         runs=runs,
         plot=plot,
+        speed_noise_std=speed_noise_std,
+        seed=seed,
     )
     output_path = save_differences(differences, output_filename=output_filename)
 
@@ -116,11 +139,23 @@ if __name__ == "__main__":
         help="YAML filename to save paired differences in data directory.",
     )
     parser.add_argument("--plot", action="store_true", help="Enable per-run energy trace plotting.")
+    parser.add_argument(
+        "--speed-noise-std",
+        type=float,
+        default=0.0,
+        help=(
+            "Gaussian speed perturbation standard deviation in m/s applied independently each run. "
+            "Use a value > 0 to make repeated runs stochastic."
+        ),
+    )
+    parser.add_argument("--seed", type=int, default=None, help="Optional random seed for reproducible noise.")
 
     args = parser.parse_args()
 
     if args.runs <= 0:
         raise ValueError("--runs must be a positive integer.")
+    if args.speed_noise_std < 0:
+        raise ValueError("--speed-noise-std must be non-negative.")
 
     main(
         location=args.location,
@@ -130,4 +165,6 @@ if __name__ == "__main__":
         runs=args.runs,
         output_filename=args.output_filename,
         plot=args.plot,
+        speed_noise_std=args.speed_noise_std,
+        seed=args.seed,
     )
