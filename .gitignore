@@ -41,4 +41,3 @@ cache/*
 src/config.py
 
 # Analysis
-src/analysis.py
