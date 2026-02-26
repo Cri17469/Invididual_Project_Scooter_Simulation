@@ -203,3 +203,14 @@ A useful way to describe this in your essay:
 - `simulate_edge_energy_wh(...)` (edge-level physical energy estimate)
 - `_normalize_speed_kph(...)` and `_extract_grade_percent(...)` (edge attribute normalization)
 - `simulate_energy(...)` (physics + battery/regen backend reused by routing)
+
+## Repeated-run behavior (`run.sh`)
+
+If you run the same cycle/parameters repeatedly with no perturbation, `simulate_energy(...)` is deterministic, so all run outputs will be identical.
+
+To support stochastic repeated runs, `src/main.py` now accepts:
+
+- `--speed-noise-std` (m/s): Gaussian speed perturbation applied per run
+- `--seed`: optional random seed for reproducible perturbations
+
+`run.sh` sets `speed_noise_std=0.2` by default, so the 30 paired runs produce a distribution instead of 30 identical values. Set it back to `0` if you want strictly deterministic repeats.
