@@ -108,9 +108,14 @@ def get_metric_array(data: dict, key: str) -> np.ndarray:
 def format_result(name: str, result: dict, alpha: float, alternative: str) -> str:
     reject_null = result["p_value"] < alpha
     decision = "Reject H0" if reject_null else "Fail to reject H0"
-
+    if alternative == "greater":
+        hypothesis = "H1: baseline - optimized > 0  (optimized < baseline)"
+    else:
+        hypothesis = "H1: baseline - optimized < 0  (optimized > baseline)"
+        
     return (
         f"[{name}] one-sided paired t-test (alpha={alpha:.2f}, alternative='{alternative}')\n"
+        f"  {hypothesis}\n"
         f"  n={result['n']}\n"
         f"  mean(diff)={result['mean_diff']:.6f} Wh\n"
         f"  std(diff)={result['std_diff']:.6f} Wh\n"
@@ -124,7 +129,7 @@ def main(
     input_filename: str = DEFAULT_INPUT_FILENAME,
     alpha: float = 0.05,
     total_alternative: str = "greater",
-    regen_alternative: str = "greater",
+    regen_alternative: str = "less",
 ) -> None:
     if not (0 < alpha < 1):
         raise ValueError("alpha must be between 0 and 1.")
@@ -145,7 +150,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=(
             "Run one-sided (single-tail) paired t-tests at alpha=0.05 by default on paired "
-            "differences from data/paired_differences.yaml."
+            "differences from data/paired_differences.yaml (where diff = baseline - optimized)."
         )
     )
     parser.add_argument(
@@ -159,13 +164,19 @@ if __name__ == "__main__":
         "--total-alternative",
         choices=ALTERNATIVES,
         default="greater",
-        help="One-sided alternative for total_energy_consumed_diff_Wh.",
+        help=(
+            "One-sided alternative for total_energy_consumed_diff_Wh (diff=baseline-optimized): "
+            "greater => optimized < baseline, less => optimized > baseline."
+        ),
     )
     parser.add_argument(
         "--regen-alternative",
         choices=ALTERNATIVES,
         default="greater",
-        help="One-sided alternative for regen_recovered_diff_Wh.",
+        help=(
+            "One-sided alternative for regen_recovered_diff_Wh (diff=baseline-optimized): "
+            "greater => optimized < baseline, less => optimized > baseline. "
+        ),
     )
 
     args = parser.parse_args()

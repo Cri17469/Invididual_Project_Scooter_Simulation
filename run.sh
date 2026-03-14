@@ -35,3 +35,6 @@ python "${repo_root}/src/main.py" --location "${location}" --runs "${runs}" --sp
 
 rm -f "${baseline_output}" "${optimized_output}"
 echo "Done. Saved required paired differences at ${data_dir}/${output_file}"
+
+echo "Start Analysis..."
+python "${repo_root}/src/analysis.py"
