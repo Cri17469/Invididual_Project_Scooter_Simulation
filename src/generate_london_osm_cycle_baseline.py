@@ -36,7 +36,9 @@ def _haversine_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) ->
     lat2_rad, lon2_rad = np.radians([lat2, lon2])
     dlat = lat2_rad - lat1_rad
     dlon = lon2_rad - lon1_rad
-    a = (np.sin(dlat / 2)) ** 2 + np.cos(lat1_rad) * np.cos(lat2_rad) * (np.sin(dlon / 2)) ** 2
+    a = (np.sin(dlat / 2)) ** 2 + np.cos(lat1_rad) * np.cos(lat2_rad) * (
+        np.sin(dlon / 2)
+    ) ** 2
     c = 2 * np.arcsin(np.sqrt(a))
     return 6371000 * c
 
@@ -79,6 +81,7 @@ def _update_route_summary(
     distance_m: float,
     duration_s: float,
     energy_est_wh: float,
+    net_elevation_m: float,
 ) -> bool:
     summary = route_data.setdefault("summary", {})
     updated = False
@@ -93,6 +96,14 @@ def _update_route_summary(
         updated = True
     elif not isclose(summary.get("energy_est_Wh"), energy_est_wh, rel_tol=1e-6):
         summary["energy_est_Wh"] = energy_est_wh
+        updated = True
+    if not isclose(
+        float(summary.get("net_elevation_m", 0.0)),
+        net_elevation_m,
+        rel_tol=1e-6,
+        abs_tol=1e-6,
+    ):
+        summary["net_elevation_m"] = net_elevation_m
         updated = True
     return updated
 
@@ -157,8 +168,11 @@ def generate_london_osm_cycle_baseline(
     total_distance_m = float(sum(segment_lengths))
     duration_s = float(t[-1]) if len(t) else 0.0
     energy_est_wh = _simulate_cycle_energy_wh(t, speed, grade)
+    net_elevation_m = float(elevation[-1] - elevation[0]) if len(elevation) else 0.0
 
-    if _update_route_summary(route_data, total_distance_m, duration_s, energy_est_wh):
+    if _update_route_summary(
+        route_data, total_distance_m, duration_s, energy_est_wh, net_elevation_m
+    ):
         save_optimized_route(route_data, route_filename)
 
     road_names = route_data.get("road_names") or ["Baseline Route"]
@@ -169,6 +183,7 @@ def generate_london_osm_cycle_baseline(
                     "summary": {
                         "distance": total_distance_m,
                         "duration": duration_s,
+                        "net_elevation_m": net_elevation_m,
                     }
                 }
             }
@@ -191,7 +206,9 @@ def generate_london_osm_cycle_baseline(
                 "lat": lat,
                 "lon": lon,
                 "route_json": route_json,
-                "routing_profile": route_data.get("summary", {}).get("network_type", "bike"),
+                "routing_profile": route_data.get("summary", {}).get(
+                    "network_type", "bike"
+                ),
             }
         ]
     )
@@ -206,7 +223,9 @@ def generate_london_osm_cycle_baseline(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate the baseline OSM cycle output.")
+    parser = argparse.ArgumentParser(
+        description="Generate the baseline OSM cycle output."
+    )
     parser.add_argument(
         "--location",
         default=DEFAULT_LOCATION,
