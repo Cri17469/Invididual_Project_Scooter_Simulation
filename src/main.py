@@ -112,6 +112,15 @@ def save_velocity_plot(
         perturb_cycle_speed(cycle, speed_noise_std=speed_noise_std, rng=rng)["v"],
         dtype=float,
     )
+    if original_velocity_ms.size == 0:
+        pure_sine_reference_velocity_ms = original_velocity_ms
+    else:
+        sample_indices = np.arange(original_velocity_ms.size, dtype=float)
+        normalized_sine = (np.sin(2.0 * np.pi * 4.0 * sample_indices / original_velocity_ms.size) + 1.0) / 2.0
+        pure_sine_reference_velocity_ms = (
+            np.min(original_velocity_ms)
+            + normalized_sine * (np.max(original_velocity_ms) - np.min(original_velocity_ms))
+        )
 
     plt.figure(figsize=(10, 5))
     plt.plot(time_s, original_velocity_ms * 3.6, label="Original sinusoidal velocity", linewidth=2)
@@ -121,6 +130,15 @@ def save_velocity_plot(
         label="Velocity with stochastic perturbation",
         linewidth=2,
         alpha=0.85,
+    )
+    plt.plot(
+        time_s,
+        pure_sine_reference_velocity_ms * 3.6,
+        linestyle="--",
+        linewidth=1.8,
+        color="black",
+        alpha=0.75,
+        label="Pure sine reference",
     )
     plt.xlabel("Time (s)")
     plt.ylabel("Velocity (km/h)")
