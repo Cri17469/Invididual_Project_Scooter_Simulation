@@ -16,6 +16,7 @@ PARAMS_FILENAME = "scooter_params.yaml"
 DEFAULT_RUNS = 30
 OUTPUT_FILENAME = "paired_differences.yaml"
 VELOCITY_PLOT_FILENAME = "velocity.jpg"
+ELEVATION_PLOT_FILENAME = "net_elevation_vs_distance.jpg"
 
 
 def resolve_cycle_filenames(
@@ -156,6 +157,122 @@ def save_velocity_plot(
     return output_path
 
 
+def _distance_and_elevation_from_cycle(cycle: dict) -> tuple[np.ndarray, np.ndarray]:
+    """Reconstruct cumulative distance (km) and relative elevation (m) from cycle dynamics."""
+    time_s = np.asarray(cycle["t"], dtype=float)
+    velocity_ms = np.asarray(cycle["v"], dtype=float)
+    theta_rad = np.asarray(cycle["theta"], dtype=float)
+
+    if time_s.size == 0:
+        return np.asarray([], dtype=float), np.asarray([], dtype=float)
+    if time_s.size == 1:
+        return np.asarray([0.0], dtype=float), np.asarray([0.0], dtype=float)
+
+    delta_t_s = np.diff(time_s)
+    segment_velocity_ms = 0.5 * (velocity_ms[:-1] + velocity_ms[1:])
+    segment_distance_m = np.clip(segment_velocity_ms * delta_t_s, a_min=0.0, a_max=None)
+    cumulative_distance_m = np.concatenate(([0.0], np.cumsum(segment_distance_m)))
+
+    segment_theta_rad = 0.5 * (theta_rad[:-1] + theta_rad[1:])
+    segment_delta_h_m = segment_distance_m * np.tan(segment_theta_rad)
+    cumulative_elevation_m = np.concatenate(([0.0], np.cumsum(segment_delta_h_m)))
+
+    return cumulative_distance_m / 1000.0, cumulative_elevation_m
+
+
+def _undulation_indicator(cumulative_elevation_m: np.ndarray) -> float:
+    if cumulative_elevation_m.size < 2:
+        return 0.0
+    elevation_steps_m = np.diff(cumulative_elevation_m)
+    return float(np.sum(np.abs(elevation_steps_m)))
+
+
+def save_net_elevation_plot(
+    baseline_cycle: dict,
+    optimized_cycle: dict,
+    output_filename: str = ELEVATION_PLOT_FILENAME,
+) -> Path:
+    """Save a net elevation vs distance plot with undulation shading."""
+    baseline_distance_km, baseline_elevation_m = _distance_and_elevation_from_cycle(baseline_cycle)
+    optimized_distance_km, optimized_elevation_m = _distance_and_elevation_from_cycle(optimized_cycle)
+
+    def _net_line(distance_km: np.ndarray, elevation_m: np.ndarray) -> np.ndarray:
+        if elevation_m.size == 0:
+            return elevation_m
+        return np.linspace(elevation_m[0], elevation_m[-1], elevation_m.size)
+
+    baseline_net_line_m = _net_line(baseline_distance_km, baseline_elevation_m)
+    optimized_net_line_m = _net_line(optimized_distance_km, optimized_elevation_m)
+
+    baseline_undulation_m = _undulation_indicator(baseline_elevation_m)
+    optimized_undulation_m = _undulation_indicator(optimized_elevation_m)
+    baseline_net_change_m = (
+        float(baseline_elevation_m[-1] - baseline_elevation_m[0]) if baseline_elevation_m.size else 0.0
+    )
+    optimized_net_change_m = (
+        float(optimized_elevation_m[-1] - optimized_elevation_m[0]) if optimized_elevation_m.size else 0.0
+    )
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+
+    ax.plot(baseline_distance_km, baseline_elevation_m, color="#1f77b4", linewidth=2.2, label="Route A (baseline)")
+    ax.plot(
+        optimized_distance_km,
+        optimized_elevation_m,
+        color="#d62728",
+        linewidth=2.2,
+        label="Route B (optimized)",
+    )
+
+    ax.plot(
+        baseline_distance_km,
+        baseline_net_line_m,
+        color="#1f77b4",
+        linestyle="--",
+        linewidth=1.4,
+        alpha=0.7,
+        label=f"Route A net Δh = {baseline_net_change_m:.1f} m",
+    )
+    ax.plot(
+        optimized_distance_km,
+        optimized_net_line_m,
+        color="#d62728",
+        linestyle="--",
+        linewidth=1.4,
+        alpha=0.7,
+        label=f"Route B net Δh = {optimized_net_change_m:.1f} m",
+    )
+
+    ax.fill_between(
+        baseline_distance_km,
+        baseline_elevation_m,
+        baseline_net_line_m,
+        color="#1f77b4",
+        alpha=0.18,
+        label=f"Route A undulation indicator = {baseline_undulation_m:.1f} m",
+    )
+    ax.fill_between(
+        optimized_distance_km,
+        optimized_elevation_m,
+        optimized_net_line_m,
+        color="#d62728",
+        alpha=0.18,
+        label=f"Route B undulation indicator = {optimized_undulation_m:.1f} m",
+    )
+
+    ax.set_xlabel("Distance (km)")
+    ax.set_ylabel("Relative elevation (m)")
+    ax.set_title("Net elevation versus distance with undulation shading")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best", fontsize=9)
+    fig.tight_layout()
+
+    output_path = get_data_dir() / output_filename
+    fig.savefig(output_path, dpi=220)
+    plt.close(fig)
+    return output_path
+
+
 def main(
     location: str = DEFAULT_LOCATION,
     baseline_cycle_filename: str | None = None,
@@ -193,10 +310,15 @@ def main(
         speed_noise_std=speed_noise_std,
         rng=rng,
     )
+    elevation_plot_path = save_net_elevation_plot(
+        baseline_cycle=baseline_cycle,
+        optimized_cycle=optimized_cycle,
+    )
 
     print(f"Completed {runs} paired simulations for location '{location}'.")
     print(f"Saved paired differences -> {output_path}")
     print(f"Saved velocity comparison plot -> {velocity_plot_path}")
+    print(f"Saved net elevation comparison plot -> {elevation_plot_path}")
 
 
 if __name__ == "__main__":
