@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
@@ -14,6 +15,7 @@ from vehicle_params import load_vehicle_params
 PARAMS_FILENAME = "scooter_params.yaml"
 DEFAULT_RUNS = 30
 OUTPUT_FILENAME = "paired_differences.yaml"
+VELOCITY_PLOT_FILENAME = "velocity.jpg"
 
 
 def resolve_cycle_filenames(
@@ -97,6 +99,43 @@ def save_differences(differences: dict, output_filename: str = OUTPUT_FILENAME) 
     return output_path
 
 
+def save_velocity_plot(
+    cycle: dict,
+    speed_noise_std: float,
+    rng: np.random.Generator,
+    output_filename: str = VELOCITY_PLOT_FILENAME,
+) -> Path:
+    """Save a speed comparison plot for original vs stochastic velocity."""
+    time_s = np.asarray(cycle["t"], dtype=float)
+    original_velocity_ms = np.asarray(cycle["v"], dtype=float)
+    perturbed_velocity_ms = np.asarray(
+        perturb_cycle_speed(cycle, speed_noise_std=speed_noise_std, rng=rng)["v"],
+        dtype=float,
+    )
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(time_s, original_velocity_ms * 3.6, label="Original sinusoidal velocity", linewidth=2)
+    plt.plot(
+        time_s,
+        perturbed_velocity_ms * 3.6,
+        label="Velocity with stochastic perturbation",
+        linewidth=2,
+        alpha=0.85,
+    )
+    plt.xlabel("Time (s)")
+    plt.ylabel("Velocity (km/h)")
+    plt.title("Velocity profile comparison")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    output_path = get_data_dir() / output_filename
+    plt.savefig(output_path, dpi=200)
+    plt.close()
+
+    return output_path
+
+
 def main(
     location: str = DEFAULT_LOCATION,
     baseline_cycle_filename: str | None = None,
@@ -117,6 +156,7 @@ def main(
     baseline_cycle = load_drive_cycle(baseline_filename)
     optimized_cycle = load_drive_cycle(optimized_filename)
     params = load_vehicle_params(params_filename)
+    rng = np.random.default_rng(seed)
 
     differences = run_paired_simulations(
         baseline_cycle=baseline_cycle,
@@ -128,9 +168,15 @@ def main(
         seed=seed,
     )
     output_path = save_differences(differences, output_filename=output_filename)
+    velocity_plot_path = save_velocity_plot(
+        baseline_cycle,
+        speed_noise_std=speed_noise_std,
+        rng=rng,
+    )
 
     print(f"Completed {runs} paired simulations for location '{location}'.")
     print(f"Saved paired differences -> {output_path}")
+    print(f"Saved velocity comparison plot -> {velocity_plot_path}")
 
 
 if __name__ == "__main__":
