@@ -115,15 +115,17 @@ def save_velocity_plot(
     if original_velocity_ms.size == 0:
         pure_sine_reference_velocity_ms = original_velocity_ms
     else:
-        sample_indices = np.arange(original_velocity_ms.size, dtype=float)
-        normalized_sine = (np.sin(2.0 * np.pi * 4.0 * sample_indices / original_velocity_ms.size) + 1.0) / 2.0
-        pure_sine_reference_velocity_ms = (
-            np.min(original_velocity_ms)
-            + normalized_sine * (np.max(original_velocity_ms) - np.min(original_velocity_ms))
-        )
+        cycles = 4.0
+        duration_s = float(time_s[-1] - time_s[0]) if time_s.size > 1 else 1.0
+        phase = 2.0 * np.pi * cycles * (time_s - time_s[0]) / max(duration_s, np.finfo(float).eps)
+        min_velocity_ms = float(np.min(original_velocity_ms))
+        max_velocity_ms = float(np.max(original_velocity_ms))
+        mean_velocity_ms = 0.5 * (max_velocity_ms + min_velocity_ms)
+        amplitude_ms = 0.5 * (max_velocity_ms - min_velocity_ms)
+        pure_sine_reference_velocity_ms = mean_velocity_ms + amplitude_ms * np.sin(phase)
 
     plt.figure(figsize=(10, 5))
-    plt.plot(time_s, original_velocity_ms * 3.6, label="Original sinusoidal velocity", linewidth=2)
+    plt.plot(time_s, original_velocity_ms * 3.6, label="Original cycle velocity", linewidth=2)
     plt.plot(
         time_s,
         perturbed_velocity_ms * 3.6,
