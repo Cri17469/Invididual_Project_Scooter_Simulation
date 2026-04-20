@@ -1,4 +1,5 @@
 import argparse
+import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -205,13 +206,13 @@ def _segment_energy_wh(
     a_seg = np.diff(velocity_ms) / dt
     theta_seg = 0.5 * (theta_rad[:-1] + theta_rad[1:])
 
-    m_total = float(params.m_vehicle + params.m_payload)
+    m_total = float(params.mass_kg + params.rider_mass_kg)
     g = float(params.g)
 
     f_inert = m_total * a_seg
     f_grade = m_total * g * np.sin(theta_seg)
     f_roll = params.Cr * m_total * g * np.cos(theta_seg)
-    f_aero = 0.5 * params.rho_air * params.CdA * v_seg**2
+    f_aero = 0.5 * params.rho_air * params.CdA_m2 * v_seg**2
     f_trac = f_inert + f_grade + f_roll + f_aero
     p_wheel = f_trac * v_seg
 
@@ -243,8 +244,24 @@ def _key_difference_segment(
 
     return (base_start, base_end), (opt_start, opt_end)
 
+def _load_route_coords_from_json(route_filename: str) -> tuple[np.ndarray, np.ndarray]:
+    """Load lon/lat arrays from data/<route_filename>."""
+    route_path = get_data_dir() / route_filename
+    if not route_path.exists():
+        return np.asarray([], dtype=float), np.asarray([], dtype=float)
+
+    with open(route_path, "r", encoding="utf-8") as f:
+        route_data = json.load(f) or {}
+
+    coords = route_data.get("coords", []) or []
+    lat = np.asarray([point.get("lat") for point in coords if "lat" in point and "lon" in point], dtype=float)
+    lon = np.asarray([point.get("lon") for point in coords if "lat" in point and "lon" in point], dtype=float)
+    if lat.size != lon.size:
+        return np.asarray([], dtype=float), np.asarray([], dtype=float)
+    return lat, lon
 
 def save_net_elevation_plot(
+    location: str,
     baseline_cycle: dict,
     optimized_cycle: dict,
     params,
@@ -257,7 +274,21 @@ def save_net_elevation_plot(
     optimized_grade_percent = np.tan(np.asarray(optimized_cycle["theta"][:-1], dtype=float)) * 100.0
     baseline_segment_energy_wh = _segment_energy_wh(baseline_cycle, params=params)
     optimized_segment_energy_wh = _segment_energy_wh(optimized_cycle, params=params)
+    baseline_lat = np.asarray(baseline_cycle.get("lat", []), dtype=float)
+    baseline_lon = np.asarray(baseline_cycle.get("lon", []), dtype=float)
+    optimized_lat = np.asarray(optimized_cycle.get("lat", []), dtype=float)
+    optimized_lon = np.asarray(optimized_cycle.get("lon", []), dtype=float)
 
+    baseline_lat, baseline_lon = _load_route_coords_from_json(f"{location}_baseline_route.json")
+    optimized_lat, optimized_lon = _load_route_coords_from_json(f"{location}_optimized_route.json")
+
+    if baseline_lat.size <= 1 or baseline_lon.size <= 1:
+        baseline_lat = np.asarray(baseline_cycle.get("lat", []), dtype=float)
+        baseline_lon = np.asarray(baseline_cycle.get("lon", []), dtype=float)
+    if optimized_lat.size <= 1 or optimized_lon.size <= 1:
+        optimized_lat = np.asarray(optimized_cycle.get("lat", []), dtype=float)
+        optimized_lon = np.asarray(optimized_cycle.get("lon", []), dtype=float)
+        
     def _net_line(distance_km: np.ndarray, elevation_m: np.ndarray) -> np.ndarray:
         if elevation_m.size == 0:
             return elevation_m
@@ -275,7 +306,76 @@ def save_net_elevation_plot(
         float(optimized_elevation_m[-1] - optimized_elevation_m[0]) if optimized_elevation_m.size else 0.0
     )
 
-    fig, ax = plt.subplots(figsize=(13, 7))
+    fig, (ax_map, ax) = plt.subplots(
+        1,
+        2,
+        figsize=(16, 7),
+        gridspec_kw={"width_ratios": [1.0, 1.35]},
+    )
+
+    if baseline_lat.size > 1 and baseline_lon.size > 1:
+        ax_map.plot(
+            baseline_lon,
+            baseline_lat,
+            linestyle="--",
+            linewidth=2.0,
+            color="#1f77b4",
+            label="Shortest-distance route (baseline)",
+        )
+    if optimized_lat.size > 1 and optimized_lon.size > 1:
+        ax_map.plot(
+            optimized_lon,
+            optimized_lat,
+            linestyle="-",
+            linewidth=3.0,
+            color="#2ca02c",
+            label="Energy-time optimised route",
+        )
+
+    if baseline_lat.size:
+        ax_map.scatter(
+            baseline_lon[0],
+            baseline_lat[0],
+            color="#1f77b4",
+            marker="o",
+            s=80,
+            edgecolors="black",
+            linewidths=0.8,
+        )
+        ax_map.scatter(
+            baseline_lon[-1],
+            baseline_lat[-1],
+            color="#1f77b4",
+            marker="*",
+            s=160,
+            edgecolors="black",
+            linewidths=0.8,
+        )
+    if optimized_lat.size:
+        ax_map.scatter(
+            optimized_lon[0],
+            optimized_lat[0],
+            color="#2ca02c",
+            marker="o",
+            s=80,
+            edgecolors="black",
+            linewidths=0.8,
+        )
+        ax_map.scatter(
+            optimized_lon[-1],
+            optimized_lat[-1],
+            color="#2ca02c",
+            marker="*",
+            s=160,
+            edgecolors="black",
+            linewidths=0.8,
+        )
+
+    ax_map.set_xlabel("Longitude")
+    ax_map.set_ylabel("Latitude")
+    ax_map.set_title("Route geometry from YAML route_coords")
+    ax_map.grid(True, alpha=0.3)
+    ax_map.legend(loc="best", fontsize=8)
 
     baseline_scatter = ax.scatter(
         baseline_distance_km[:-1],
@@ -456,6 +556,7 @@ def main(
         rng=rng,
     )
     elevation_plot_path = save_net_elevation_plot(
+        location=location,
         baseline_cycle=baseline_cycle,
         optimized_cycle=optimized_cycle,
         params=params,

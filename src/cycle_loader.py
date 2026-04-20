@@ -28,6 +28,13 @@ def load_drive_cycle(filename: str = "cycle.yaml") -> dict:
             )
 
         theta = np.arctan(g / 100.0)
+        route_coords = data.get("route_coords", {}) or {}
+        lat = np.asarray(route_coords.get("lat", []), dtype=float)
+        lon = np.asarray(route_coords.get("lon", []), dtype=float)
+        if lat.size != lon.size:
+            raise ValueError(
+                f"[cycle_loader] Mismatched route coordinate lengths: lat={lat.size}, lon={lon.size}"
+            )
 
     except KeyError as e:
         raise RuntimeError(f"[cycle_loader] Missing mandatory key: {e}")
@@ -40,5 +47,7 @@ def load_drive_cycle(filename: str = "cycle.yaml") -> dict:
         "description": data.get("description", ""),
         "t": t,
         "v": v,
-        "theta": theta
+        "theta": theta,
+        "lat": lat,
+        "lon": lon,
     }
