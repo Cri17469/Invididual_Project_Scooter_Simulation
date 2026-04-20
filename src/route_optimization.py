@@ -187,22 +187,43 @@ def _ensure_edge_grades(
     graph_filename: str = DEFAULT_GRAPH_FILENAME,
 ) -> None:
     elevation_stats = None
-    if any("elevation" not in data for _, data in graph.nodes(data=True)):
+    node_elevations = [float(data.get("elevation", 0.0)) for _, data in graph.nodes(data=True)]
+    has_missing_elevation = any("elevation" not in data for _, data in graph.nodes(data=True))
+    all_zero_elevation = bool(node_elevations) and np.allclose(node_elevations, 0.0, atol=1e-6)
+
+    cached_lookup = graph.graph.get("elevation_lookup") if isinstance(graph.graph, dict) else None
+    low_cached_success = (
+        isinstance(cached_lookup, dict)
+        and float(cached_lookup.get("success_ratio", 1.0)) < 0.5
+    )
+
+    if has_missing_elevation or all_zero_elevation or low_cached_success:
         elevation_stats = _fetch_node_elevations(graph)
         if elevation_stats["success_ratio"] < 0.5:
             warnings.warn(
                 "Low elevation lookup success; optimization may collapse to a near time-only route.",
                 RuntimeWarning,
             )
+
     ox.add_edge_grades(graph, add_absolute=True)
     nonzero_grade_edges = sum(
         1 for _, _, data in graph.edges(data=True) if abs(float(data.get("grade", 0.0))) > 1e-6
     )
+
+    if nonzero_grade_edges == 0 and not has_missing_elevation:
+        # Cached graph can persist all-zero elevations from a previous failed lookup.
+        elevation_stats = _fetch_node_elevations(graph)
+        ox.add_edge_grades(graph, add_absolute=True)
+        nonzero_grade_edges = sum(
+            1 for _, _, data in graph.edges(data=True) if abs(float(data.get("grade", 0.0))) > 1e-6
+        )
+
     if nonzero_grade_edges == 0:
         warnings.warn(
             "All edge grades are zero. Baseline and optimized routes may become identical.",
             RuntimeWarning,
         )
+
     if elevation_stats is not None:
         graph.graph["elevation_lookup"] = elevation_stats
     graph.graph["nonzero_grade_edges"] = int(nonzero_grade_edges)
