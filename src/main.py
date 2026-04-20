@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
-from config import DEFAULT_LOCATION
+from route_defaults import DEFAULT_LOCATION
 from cycle_loader import load_drive_cycle
 from energy_model import simulate_energy
 from utils import get_data_dir

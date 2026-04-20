@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from config import DEFAULT_LOCATION, DEFAULT_ROUTE_DESTINATION, DEFAULT_ROUTE_ORIGIN
+from route_defaults import DEFAULT_LOCATION, DEFAULT_ROUTE_DESTINATION, DEFAULT_ROUTE_ORIGIN
 from energy_model import simulate_energy
 from generate_london_osm_cycle import (
     apply_urban_events,

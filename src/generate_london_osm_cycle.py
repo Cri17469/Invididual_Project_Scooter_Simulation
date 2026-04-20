@@ -7,7 +7,7 @@ import requests
 import time
 import openrouteservice as ors
 
-from config import DEFAULT_ROUTE_DESTINATION, DEFAULT_ROUTE_ORIGIN
+from route_defaults import DEFAULT_ROUTE_DESTINATION, DEFAULT_ROUTE_ORIGIN
 
 # ==============================================================
 # 1. Get real OSM route using OpenRouteService
