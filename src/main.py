@@ -260,6 +260,22 @@ def _load_route_coords_from_json(route_filename: str) -> tuple[np.ndarray, np.nd
         return np.asarray([], dtype=float), np.asarray([], dtype=float)
     return lat, lon
 
+
+def _coords_are_identical(
+    lat_a: np.ndarray,
+    lon_a: np.ndarray,
+    lat_b: np.ndarray,
+    lon_b: np.ndarray,
+    atol: float = 1e-9,
+) -> bool:
+    """Return True when two coordinate arrays represent the same route shape."""
+    if lat_a.size == 0 or lon_a.size == 0 or lat_b.size == 0 or lon_b.size == 0:
+        return False
+    if lat_a.size != lat_b.size or lon_a.size != lon_b.size:
+        return False
+    return bool(np.allclose(lat_a, lat_b, atol=atol) and np.allclose(lon_a, lon_b, atol=atol))
+
+
 def save_net_elevation_plot(
     location: str,
     baseline_cycle: dict,
@@ -286,6 +302,13 @@ def save_net_elevation_plot(
         baseline_lat = np.asarray(baseline_cycle.get("lat", []), dtype=float)
         baseline_lon = np.asarray(baseline_cycle.get("lon", []), dtype=float)
     if optimized_lat.size <= 1 or optimized_lon.size <= 1:
+        optimized_lat = np.asarray(optimized_cycle.get("lat", []), dtype=float)
+        optimized_lon = np.asarray(optimized_cycle.get("lon", []), dtype=float)
+
+    # Handle stale/corrupted cached JSON where baseline/optimized coordinates are identical.
+    if _coords_are_identical(baseline_lat, baseline_lon, optimized_lat, optimized_lon):
+        baseline_lat = np.asarray(baseline_cycle.get("lat", []), dtype=float)
+        baseline_lon = np.asarray(baseline_cycle.get("lon", []), dtype=float)
         optimized_lat = np.asarray(optimized_cycle.get("lat", []), dtype=float)
         optimized_lon = np.asarray(optimized_cycle.get("lon", []), dtype=float)
         
