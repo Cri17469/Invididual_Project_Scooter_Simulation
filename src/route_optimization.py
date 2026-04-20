@@ -280,45 +280,49 @@ def optimize_route(
 
         return graph_proj, origin_node, destination_node
 
-    graph = build_graph(
-        resolved_origin,
-        resolved_destination,
-        network_type=network_type,
-        buffer_m=buffer_m,
-        graph_filename=graph_filename,
-    )
-    _ensure_edge_grades(graph, graph_filename=graph_filename)
-    graph_proj, origin_node, destination_node = resolve_nodes(graph)
-
-    for u, v, k, data in graph_proj.edges(keys=True, data=True):
-        length_m = float(data.get("length", 0.0))
-        speed_kph = _normalize_speed_kph(data.get("speed_kph"), max_speed_kmh)
-        speed_kph = min(speed_kph, max_speed_kmh)
-        time_s = length_m / (speed_kph / 3.6) if speed_kph > 0 else 0.0
-        grade_percent = _extract_grade_percent(data)
-        energy_wh = simulate_edge_energy_wh(length_m, speed_kph, grade_percent, params)
-        data["cost"] = weights.get("energy", 1.0) * energy_wh + weights.get("time", 1.0) * time_s
-        data["energy_est_Wh"] = energy_wh
-        data["time_est_s"] = time_s
-
-    try:
-        route_nodes = nx.shortest_path(graph_proj, origin_node, destination_node, weight="cost")
-    except nx.NetworkXNoPath:
+    def build_graph_and_costs(local_buffer_m: float, use_cache: bool = True) -> tuple[nx.MultiDiGraph, int, int]:
         graph = build_graph(
             resolved_origin,
             resolved_destination,
             network_type=network_type,
-            buffer_m=buffer_m * 2,
+            buffer_m=local_buffer_m,
             graph_filename=graph_filename,
+            use_cache=use_cache,
+        )
+        _ensure_edge_grades(graph, graph_filename=graph_filename)
+        graph_proj, origin_node, destination_node = resolve_nodes(graph)
+
+        for _, _, _, data in graph_proj.edges(keys=True, data=True):
+            length_m = float(data.get("length", 0.0))
+            speed_kph = _normalize_speed_kph(data.get("speed_kph"), max_speed_kmh)
+            speed_kph = min(speed_kph, max_speed_kmh)
+            time_s = length_m / (speed_kph / 3.6) if speed_kph > 0 else 0.0
+            grade_percent = _extract_grade_percent(data)
+            energy_wh = simulate_edge_energy_wh(length_m, speed_kph, grade_percent, params)
+            data["cost"] = weights.get("energy", 1.0) * energy_wh + weights.get("time", 1.0) * time_s
+            data["energy_est_Wh"] = energy_wh
+            data["time_est_s"] = time_s
+
+        return graph_proj, origin_node, destination_node
+
+    graph_proj, origin_node, destination_node = build_graph_and_costs(
+        local_buffer_m=buffer_m,
+        use_cache=True,
+    )
+
+    try:
+        route_nodes = nx.shortest_path(graph_proj, origin_node, destination_node, weight="cost")
+    except nx.NetworkXNoPath:
+        graph_proj, origin_node, destination_node = build_graph_and_costs(
+            local_buffer_m=buffer_m * 2,
             use_cache=False,
         )
-        graph_proj, origin_node, destination_node = resolve_nodes(graph)
         route_nodes = nx.shortest_path(graph_proj, origin_node, destination_node, weight="cost")
 
     coords = [
         {
-            "lat": float(graph.nodes[node]["y"]),
-            "lon": float(graph.nodes[node]["x"]),
+            "lat": float(graph_proj.nodes[node]["y"]),
+            "lon": float(graph_proj.nodes[node]["x"]),
         }
         for node in route_nodes
     ]

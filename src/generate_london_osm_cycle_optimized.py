@@ -113,7 +113,10 @@ def _needs_route_refresh(route_data: dict, expected_weights: dict[str, float]) -
     weights = summary.get("weights")
     duration_s = summary.get("duration_s")
     energy_est_wh = summary.get("energy_est_Wh")
+    route_variant = summary.get("route_variant")
     if weights != expected_weights:
+        return True
+    if route_variant != "optimized":
         return True
     if duration_s is None or duration_s <= 0:
         return True
@@ -173,6 +176,10 @@ def generate_london_osm_cycle_optimized(
     if _update_route_summary(
         route_data, total_distance_m, duration_s, energy_est_wh, net_elevation_m
     ):
+        route_data.setdefault("summary", {})["route_variant"] = "optimized"
+        save_optimized_route(route_data, route_filename)
+    else:
+        route_data.setdefault("summary", {})["route_variant"] = "optimized"
         save_optimized_route(route_data, route_filename)
 
     road_names = route_data.get("road_names") or ["Optimized Route"]
