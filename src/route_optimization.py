@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import warnings
 from pathlib import Path
 from typing import Iterable
 
@@ -146,9 +147,15 @@ def simulate_edge_energy_wh(
     return max(float(result["E_Wh"]), 0.0)
 
 
-def _fetch_node_elevations(graph: nx.MultiDiGraph, chunk_size: int = 80, pause_s: float = 0.2) -> None:
+def _fetch_node_elevations(
+    graph: nx.MultiDiGraph, chunk_size: int = 80, pause_s: float = 0.2
+) -> dict[str, float]:
     nodes = list(graph.nodes(data=True))
     coords = [(node_id, data.get("y"), data.get("x")) for node_id, data in nodes]
+    total_nodes = len(coords)
+    successful_nodes = 0
+    failed_chunks = 0
+
     for i in range(0, len(coords), chunk_size):
         chunk = coords[i:i + chunk_size]
         locations = "|".join([f"{lat},{lon}" for _, lat, lon in chunk])
@@ -159,19 +166,46 @@ def _fetch_node_elevations(graph: nx.MultiDiGraph, chunk_size: int = 80, pause_s
             data = response.json()
             for (node_id, _, _), result in zip(chunk, data.get("results", []), strict=False):
                 graph.nodes[node_id]["elevation"] = float(result.get("elevation", 0.0))
+                successful_nodes += 1
         except requests.RequestException:
+            failed_chunks += 1
             for node_id, _, _ in chunk:
                 graph.nodes[node_id]["elevation"] = 0.0
         time.sleep(pause_s)
+
+    success_ratio = (successful_nodes / total_nodes) if total_nodes else 0.0
+    return {
+        "total_nodes": float(total_nodes),
+        "successful_nodes": float(successful_nodes),
+        "failed_chunks": float(failed_chunks),
+        "success_ratio": float(success_ratio),
+    }
 
 
 def _ensure_edge_grades(
     graph: nx.MultiDiGraph,
     graph_filename: str = DEFAULT_GRAPH_FILENAME,
 ) -> None:
+    elevation_stats = None
     if any("elevation" not in data for _, data in graph.nodes(data=True)):
-        _fetch_node_elevations(graph)
+        elevation_stats = _fetch_node_elevations(graph)
+        if elevation_stats["success_ratio"] < 0.5:
+            warnings.warn(
+                "Low elevation lookup success; optimization may collapse to a near time-only route.",
+                RuntimeWarning,
+            )
     ox.add_edge_grades(graph, add_absolute=True)
+    nonzero_grade_edges = sum(
+        1 for _, _, data in graph.edges(data=True) if abs(float(data.get("grade", 0.0))) > 1e-6
+    )
+    if nonzero_grade_edges == 0:
+        warnings.warn(
+            "All edge grades are zero. Baseline and optimized routes may become identical.",
+            RuntimeWarning,
+        )
+    if elevation_stats is not None:
+        graph.graph["elevation_lookup"] = elevation_stats
+    graph.graph["nonzero_grade_edges"] = int(nonzero_grade_edges)
     data_dir = get_data_dir()
     graph_path = data_dir / graph_filename
     ox.save_graphml(graph, graph_path)
@@ -327,6 +361,7 @@ def optimize_route(
     route_time_s = 0.0
     route_energy_est_Wh = 0.0
     road_names: list[str] = []
+    grade_samples: list[float] = []
     for u, v in zip(route_nodes[:-1], route_nodes[1:]):
         edge_data = graph_proj.get_edge_data(u, v)
         if not edge_data:
@@ -336,6 +371,7 @@ def optimize_route(
         route_time_s += float(edge.get("time_est_s", 0.0))
         route_energy_est_Wh += float(edge.get("energy_est_Wh", 0.0))
         edge_name = edge.get("name")
+        grade_samples.append(float(edge.get("grade", 0.0)) * 100.0)
         if isinstance(edge_name, list):
             edge_name = edge_name[0] if edge_name else None
         if isinstance(edge_name, str):
@@ -362,6 +398,10 @@ def optimize_route(
             "weights": weights,
             "max_speed_kmh": max_speed_kmh,
             "network_type": network_type,
+            "mean_abs_grade_percent": float(np.mean(np.abs(grade_samples))) if grade_samples else 0.0,
+            "max_abs_grade_percent": float(np.max(np.abs(grade_samples))) if grade_samples else 0.0,
+            "nonzero_grade_edges_graph": int(graph.graph.get("nonzero_grade_edges", 0)),
+            "elevation_lookup": graph.graph.get("elevation_lookup"),
         },
     }
 
