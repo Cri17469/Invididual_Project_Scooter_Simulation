@@ -187,6 +187,31 @@ def _undulation_indicator(cumulative_elevation_m: np.ndarray) -> float:
     return float(np.sum(np.abs(elevation_steps_m)))
 
 
+def _match_shared_net_elevation(
+    baseline_elevation_m: np.ndarray,
+    optimized_elevation_m: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Align both elevation traces to a shared net Δh while preserving shape."""
+    if baseline_elevation_m.size < 2 or optimized_elevation_m.size < 2:
+        return baseline_elevation_m, optimized_elevation_m
+
+    baseline_delta = float(baseline_elevation_m[-1] - baseline_elevation_m[0])
+    optimized_delta = float(optimized_elevation_m[-1] - optimized_elevation_m[0])
+    shared_delta = 0.5 * (baseline_delta + optimized_delta)
+
+    baseline_correction = np.linspace(
+        0.0,
+        shared_delta - baseline_delta,
+        baseline_elevation_m.size,
+    )
+    optimized_correction = np.linspace(
+        0.0,
+        shared_delta - optimized_delta,
+        optimized_elevation_m.size,
+    )
+    return baseline_elevation_m + baseline_correction, optimized_elevation_m + optimized_correction
+
+
 def _segment_energy_wh(
     cycle: dict,
     params,
@@ -253,6 +278,9 @@ def save_net_elevation_plot(
     """Save a baseline-vs-optimized comparison chart with mechanism-focused annotations."""
     baseline_distance_km, baseline_elevation_m = _distance_and_elevation_from_cycle(baseline_cycle)
     optimized_distance_km, optimized_elevation_m = _distance_and_elevation_from_cycle(optimized_cycle)
+    baseline_elevation_m, optimized_elevation_m = _match_shared_net_elevation(
+        baseline_elevation_m, optimized_elevation_m
+    )
     baseline_grade_percent = np.tan(np.asarray(baseline_cycle["theta"][:-1], dtype=float)) * 100.0
     optimized_grade_percent = np.tan(np.asarray(optimized_cycle["theta"][:-1], dtype=float)) * 100.0
     baseline_segment_energy_wh = _segment_energy_wh(baseline_cycle, params=params)
