@@ -378,6 +378,26 @@ def optimize_route(
         for node in route_nodes
     ]
 
+    # Force route polyline to start/end exactly at the requested OD points so
+    # baseline/optimized runs share identical endpoint elevation references.
+    if coords:
+        start = {"lat": float(resolved_origin[0]), "lon": float(resolved_origin[1])}
+        end = {"lat": float(resolved_destination[0]), "lon": float(resolved_destination[1])}
+        if not (
+            np.isclose(coords[0]["lat"], start["lat"], atol=1e-9)
+            and np.isclose(coords[0]["lon"], start["lon"], atol=1e-9)
+        ):
+            coords.insert(0, start)
+        else:
+            coords[0] = start
+        if not (
+            np.isclose(coords[-1]["lat"], end["lat"], atol=1e-9)
+            and np.isclose(coords[-1]["lon"], end["lon"], atol=1e-9)
+        ):
+            coords.append(end)
+        else:
+            coords[-1] = end
+
     route_length_m = 0.0
     route_time_s = 0.0
     route_energy_est_Wh = 0.0
