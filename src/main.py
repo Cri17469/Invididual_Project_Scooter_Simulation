@@ -5,7 +5,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
-from route_defaults import DEFAULT_LOCATION
+from route_defaults import (
+    DEFAULT_LOCATION,
+    DEFAULT_ROUTE_DESTINATION,
+    DEFAULT_ROUTE_ORIGIN,
+)
 from cycle_loader import load_drive_cycle
 from energy_model import simulate_energy
 from utils import get_data_dir
@@ -187,6 +191,43 @@ def _undulation_indicator(cumulative_elevation_m: np.ndarray) -> float:
     return float(np.sum(np.abs(elevation_steps_m)))
 
 
+def _undulation_energy_ratio_percent(cycle: dict, params) -> tuple[float, float, float]:
+    """
+    Return (ratio_percent, undulation_wh, total_wheel_wh) based on wheel-domain terms:
+      δ = ∫ |F_grade v| dt
+      W_total = W_inertial + W_rolling + W_grade + W_aero
+    """
+    t = np.asarray(cycle["t"], dtype=float)
+    v = np.asarray(cycle["v"], dtype=float)
+    theta = np.asarray(cycle["theta"], dtype=float)
+    if t.size < 2:
+        return 0.0, 0.0, 0.0
+
+    dt = np.diff(t)
+    dt = np.clip(dt, a_min=np.finfo(float).eps, a_max=None)
+    v_seg = 0.5 * (v[:-1] + v[1:])
+    a_seg = np.diff(v) / dt
+    theta_seg = 0.5 * (theta[:-1] + theta[1:])
+
+    m_total = float(params.mass_kg + params.rider_mass_kg)
+    g = float(params.g)
+
+    f_inert = m_total * a_seg
+    f_grade = m_total * g * np.sin(theta_seg)
+    f_roll = params.Cr * m_total * g * np.cos(theta_seg)
+    f_aero = 0.5 * params.rho_air * params.CdA_m2 * v_seg**2
+
+    p_inert = np.abs(f_inert * v_seg)
+    p_roll = np.abs(f_roll * v_seg)
+    p_grade = np.abs(f_grade * v_seg)
+    p_aero = np.abs(f_aero * v_seg)
+
+    undulation_wh = float(np.sum(p_grade * dt) / 3600.0)
+    total_wheel_wh = float(np.sum((p_inert + p_roll + p_grade + p_aero) * dt) / 3600.0)
+    ratio_pct = float((undulation_wh / total_wheel_wh) * 100.0) if total_wheel_wh > 0 else 0.0
+    return ratio_pct, undulation_wh, total_wheel_wh
+
+
 def _match_shared_net_elevation(
     baseline_elevation_m: np.ndarray,
     optimized_elevation_m: np.ndarray,
@@ -298,8 +339,12 @@ def save_net_elevation_plot(
     baseline_net_line_m = _net_line(baseline_distance_km, baseline_elevation_m)
     optimized_net_line_m = _net_line(optimized_distance_km, optimized_elevation_m)
 
-    baseline_undulation_m = _undulation_indicator(baseline_elevation_m)
-    optimized_undulation_m = _undulation_indicator(optimized_elevation_m)
+    baseline_undulation_ratio_pct, baseline_undulation_wh, baseline_total_wheel_wh = (
+        _undulation_energy_ratio_percent(baseline_cycle, params)
+    )
+    optimized_undulation_ratio_pct, optimized_undulation_wh, optimized_total_wheel_wh = (
+        _undulation_energy_ratio_percent(optimized_cycle, params)
+    )
     baseline_net_change_m = (
         float(baseline_elevation_m[-1] - baseline_elevation_m[0]) if baseline_elevation_m.size else 0.0
     )
@@ -333,44 +378,31 @@ def save_net_elevation_plot(
             label="Energy-time optimised route",
         )
 
-    if baseline_lat.size:
-        ax_map.scatter(
-            baseline_lon[0],
-            baseline_lat[0],
-            color="#1f77b4",
-            marker="o",
-            s=80,
-            edgecolors="black",
-            linewidths=0.8,
-        )
-        ax_map.scatter(
-            baseline_lon[-1],
-            baseline_lat[-1],
-            color="#1f77b4",
-            marker="*",
-            s=160,
-            edgecolors="black",
-            linewidths=0.8,
-        )
-    if optimized_lat.size:
-        ax_map.scatter(
-            optimized_lon[0],
-            optimized_lat[0],
-            color="#2ca02c",
-            marker="o",
-            s=80,
-            edgecolors="black",
-            linewidths=0.8,
-        )
-        ax_map.scatter(
-            optimized_lon[-1],
-            optimized_lat[-1],
-            color="#2ca02c",
-            marker="*",
-            s=160,
-            edgecolors="black",
-            linewidths=0.8,
-        )
+    # Plot shared OD markers once to avoid visual drift from route node snapping.
+    start_lat, start_lon = DEFAULT_ROUTE_ORIGIN
+    end_lat, end_lon = DEFAULT_ROUTE_DESTINATION
+    ax_map.scatter(
+        start_lon,
+        start_lat,
+        color="#111111",
+        marker="o",
+        s=90,
+        edgecolors="white",
+        linewidths=1.0,
+        label="Shared start",
+        zorder=8,
+    )
+    ax_map.scatter(
+        end_lon,
+        end_lat,
+        color="#111111",
+        marker="*",
+        s=170,
+        edgecolors="white",
+        linewidths=1.0,
+        label="Shared destination",
+        zorder=8,
+    )
 
     ax_map.set_xlabel("Longitude")
     ax_map.set_ylabel("Latitude")
@@ -443,7 +475,10 @@ def save_net_elevation_plot(
         baseline_net_line_m,
         color="#1f77b4",
         alpha=0.18,
-        label=f"Route A undulation indicator = {baseline_undulation_m:.1f} m",
+        label=(
+            f"Route A undulation δ/W_total = {baseline_undulation_ratio_pct:.1f}% "
+            f"(δ={baseline_undulation_wh:.1f} Wh, W_total={baseline_total_wheel_wh:.1f} Wh)"
+        ),
     )
     ax.fill_between(
         optimized_distance_km,
@@ -451,7 +486,10 @@ def save_net_elevation_plot(
         optimized_net_line_m,
         color="#d62728",
         alpha=0.18,
-        label=f"Route B undulation indicator = {optimized_undulation_m:.1f} m",
+        label=(
+            f"Route B undulation δ/W_total = {optimized_undulation_ratio_pct:.1f}% "
+            f"(δ={optimized_undulation_wh:.1f} Wh, W_total={optimized_total_wheel_wh:.1f} Wh)"
+        ),
     )
 
     baseline_key, optimized_key = _key_difference_segment(
