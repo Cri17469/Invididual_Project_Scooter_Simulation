@@ -378,31 +378,54 @@ def save_net_elevation_plot(
             label="Energy-time optimised route",
         )
 
-    # Plot shared OD markers once to avoid visual drift from route node snapping.
-    start_lat, start_lon = DEFAULT_ROUTE_ORIGIN
-    end_lat, end_lon = DEFAULT_ROUTE_DESTINATION
-    ax_map.scatter(
-        start_lon,
-        start_lat,
-        color="#111111",
-        marker="o",
-        s=90,
-        edgecolors="white",
-        linewidths=1.0,
-        label="Shared start",
-        zorder=8,
-    )
-    ax_map.scatter(
-        end_lon,
-        end_lat,
-        color="#111111",
-        marker="*",
-        s=170,
-        edgecolors="white",
-        linewidths=1.0,
-        label="Shared destination",
-        zorder=8,
-    )
+    # Use each route's raw lat/lon endpoints to keep map geometry aligned with plotted polylines.
+    if baseline_lat.size > 0 and baseline_lon.size > 0:
+        ax_map.scatter(
+            baseline_lon[0],
+            baseline_lat[0],
+            color="#1f77b4",
+            marker="o",
+            s=70,
+            edgecolors="white",
+            linewidths=0.8,
+            label="Route A start",
+            zorder=8,
+        )
+        ax_map.scatter(
+            baseline_lon[-1],
+            baseline_lat[-1],
+            color="#1f77b4",
+            marker="*",
+            s=120,
+            edgecolors="white",
+            linewidths=0.8,
+            label="Route A destination",
+            zorder=8,
+        )
+
+    if optimized_lat.size > 0 and optimized_lon.size > 0:
+        ax_map.scatter(
+            optimized_lon[0],
+            optimized_lat[0],
+            color="#2ca02c",
+            marker="o",
+            s=70,
+            edgecolors="white",
+            linewidths=0.8,
+            label="Route B start",
+            zorder=8,
+        )
+        ax_map.scatter(
+            optimized_lon[-1],
+            optimized_lat[-1],
+            color="#2ca02c",
+            marker="*",
+            s=120,
+            edgecolors="white",
+            linewidths=0.8,
+            label="Route B destination",
+            zorder=8,
+        )
 
     ax_map.set_xlabel("Longitude")
     ax_map.set_ylabel("Latitude")
