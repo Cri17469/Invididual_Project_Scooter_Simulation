@@ -1,12 +1,11 @@
 import argparse
-import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
-from config import DEFAULT_LOCATION
+from route_defaults import DEFAULT_LOCATION
 from cycle_loader import load_drive_cycle
 from energy_model import simulate_energy
 from utils import get_data_dir
@@ -188,6 +187,31 @@ def _undulation_indicator(cumulative_elevation_m: np.ndarray) -> float:
     return float(np.sum(np.abs(elevation_steps_m)))
 
 
+def _match_shared_net_elevation(
+    baseline_elevation_m: np.ndarray,
+    optimized_elevation_m: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Align both elevation traces to a shared net Δh while preserving shape."""
+    if baseline_elevation_m.size < 2 or optimized_elevation_m.size < 2:
+        return baseline_elevation_m, optimized_elevation_m
+
+    baseline_delta = float(baseline_elevation_m[-1] - baseline_elevation_m[0])
+    optimized_delta = float(optimized_elevation_m[-1] - optimized_elevation_m[0])
+    shared_delta = 0.5 * (baseline_delta + optimized_delta)
+
+    baseline_correction = np.linspace(
+        0.0,
+        shared_delta - baseline_delta,
+        baseline_elevation_m.size,
+    )
+    optimized_correction = np.linspace(
+        0.0,
+        shared_delta - optimized_delta,
+        optimized_elevation_m.size,
+    )
+    return baseline_elevation_m + baseline_correction, optimized_elevation_m + optimized_correction
+
+
 def _segment_energy_wh(
     cycle: dict,
     params,
@@ -244,38 +268,6 @@ def _key_difference_segment(
 
     return (base_start, base_end), (opt_start, opt_end)
 
-def _load_route_coords_from_json(route_filename: str) -> tuple[np.ndarray, np.ndarray]:
-    """Load lon/lat arrays from data/<route_filename>."""
-    route_path = get_data_dir() / route_filename
-    if not route_path.exists():
-        return np.asarray([], dtype=float), np.asarray([], dtype=float)
-
-    with open(route_path, "r", encoding="utf-8") as f:
-        route_data = json.load(f) or {}
-
-    coords = route_data.get("coords", []) or []
-    lat = np.asarray([point.get("lat") for point in coords if "lat" in point and "lon" in point], dtype=float)
-    lon = np.asarray([point.get("lon") for point in coords if "lat" in point and "lon" in point], dtype=float)
-    if lat.size != lon.size:
-        return np.asarray([], dtype=float), np.asarray([], dtype=float)
-    return lat, lon
-
-
-def _coords_are_identical(
-    lat_a: np.ndarray,
-    lon_a: np.ndarray,
-    lat_b: np.ndarray,
-    lon_b: np.ndarray,
-    atol: float = 1e-9,
-) -> bool:
-    """Return True when two coordinate arrays represent the same route shape."""
-    if lat_a.size == 0 or lon_a.size == 0 or lat_b.size == 0 or lon_b.size == 0:
-        return False
-    if lat_a.size != lat_b.size or lon_a.size != lon_b.size:
-        return False
-    return bool(np.allclose(lat_a, lat_b, atol=atol) and np.allclose(lon_a, lon_b, atol=atol))
-
-
 def save_net_elevation_plot(
     location: str,
     baseline_cycle: dict,
@@ -286,6 +278,9 @@ def save_net_elevation_plot(
     """Save a baseline-vs-optimized comparison chart with mechanism-focused annotations."""
     baseline_distance_km, baseline_elevation_m = _distance_and_elevation_from_cycle(baseline_cycle)
     optimized_distance_km, optimized_elevation_m = _distance_and_elevation_from_cycle(optimized_cycle)
+    baseline_elevation_m, optimized_elevation_m = _match_shared_net_elevation(
+        baseline_elevation_m, optimized_elevation_m
+    )
     baseline_grade_percent = np.tan(np.asarray(baseline_cycle["theta"][:-1], dtype=float)) * 100.0
     optimized_grade_percent = np.tan(np.asarray(optimized_cycle["theta"][:-1], dtype=float)) * 100.0
     baseline_segment_energy_wh = _segment_energy_wh(baseline_cycle, params=params)
@@ -295,23 +290,6 @@ def save_net_elevation_plot(
     optimized_lat = np.asarray(optimized_cycle.get("lat", []), dtype=float)
     optimized_lon = np.asarray(optimized_cycle.get("lon", []), dtype=float)
 
-    baseline_lat, baseline_lon = _load_route_coords_from_json(f"{location}_baseline_route.json")
-    optimized_lat, optimized_lon = _load_route_coords_from_json(f"{location}_optimized_route.json")
-
-    if baseline_lat.size <= 1 or baseline_lon.size <= 1:
-        baseline_lat = np.asarray(baseline_cycle.get("lat", []), dtype=float)
-        baseline_lon = np.asarray(baseline_cycle.get("lon", []), dtype=float)
-    if optimized_lat.size <= 1 or optimized_lon.size <= 1:
-        optimized_lat = np.asarray(optimized_cycle.get("lat", []), dtype=float)
-        optimized_lon = np.asarray(optimized_cycle.get("lon", []), dtype=float)
-
-    # Handle stale/corrupted cached JSON where baseline/optimized coordinates are identical.
-    if _coords_are_identical(baseline_lat, baseline_lon, optimized_lat, optimized_lon):
-        baseline_lat = np.asarray(baseline_cycle.get("lat", []), dtype=float)
-        baseline_lon = np.asarray(baseline_cycle.get("lon", []), dtype=float)
-        optimized_lat = np.asarray(optimized_cycle.get("lat", []), dtype=float)
-        optimized_lon = np.asarray(optimized_cycle.get("lon", []), dtype=float)
-        
     def _net_line(distance_km: np.ndarray, elevation_m: np.ndarray) -> np.ndarray:
         if elevation_m.size == 0:
             return elevation_m
@@ -396,7 +374,7 @@ def save_net_elevation_plot(
 
     ax_map.set_xlabel("Longitude")
     ax_map.set_ylabel("Latitude")
-    ax_map.set_title("Route geometry from YAML route_coords")
+    ax_map.set_title("Route geometry from current simulation cycles")
     ax_map.grid(True, alpha=0.3)
     ax_map.legend(loc="best", fontsize=8)
 

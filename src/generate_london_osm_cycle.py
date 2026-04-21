@@ -7,7 +7,7 @@ import requests
 import time
 import openrouteservice as ors
 
-from config import DEFAULT_ROUTE_DESTINATION, DEFAULT_ROUTE_ORIGIN
+from route_defaults import DEFAULT_ROUTE_DESTINATION, DEFAULT_ROUTE_ORIGIN
 
 # ==============================================================
 # 1. Get real OSM route using OpenRouteService
@@ -114,8 +114,23 @@ def extract_segment_lengths(route_json):
 # 3. Elevation using OpenElevation API (free)
 # ==============================================================
 
+def _lookup_single_elevation(lat: float, lon: float) -> float | None:
+    """Return point elevation from Open-Elevation, or None on failure."""
+    url = f"https://api.open-elevation.com/api/v1/lookup?locations={lat},{lon}"
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        payload = response.json() or {}
+        results = payload.get("results") or []
+        if not results:
+            return None
+        return float(results[0].get("elevation"))
+    except (requests.exceptions.RequestException, TypeError, ValueError, KeyError):
+        return None
+
+
 def get_elevation_profile(lat, lon, chunk_size=80):
-    elevation = []
+    elevation: list[float] = []
     coords = list(zip(lat, lon))
 
     for i in range(0, len(coords), chunk_size):
@@ -125,7 +140,8 @@ def get_elevation_profile(lat, lon, chunk_size=80):
         url = f"https://api.open-elevation.com/api/v1/lookup?locations={locations}"
 
         try:
-            r = requests.get(url)
+            r = requests.get(url, timeout=30)
+            r.raise_for_status()
             data = r.json()
 
             for res in data["results"]:
@@ -133,11 +149,36 @@ def get_elevation_profile(lat, lon, chunk_size=80):
 
         except Exception as e:
             print(f"[WARNING] elevation chunk failed: {e}")
-            elevation.extend([0] * len(chunk))
+            elevation.extend([np.nan] * len(chunk))
 
         time.sleep(0.2)  # avoid rate limit
 
-    return np.array(elevation)
+    elevation_arr = np.asarray(elevation, dtype=float)
+    if elevation_arr.size == 0:
+        return elevation_arr
+
+    nan_mask = np.isnan(elevation_arr)
+    if nan_mask.any():
+        valid_idx = np.where(~nan_mask)[0]
+        if valid_idx.size >= 2:
+            elevation_arr[nan_mask] = np.interp(
+                np.where(nan_mask)[0], valid_idx, elevation_arr[valid_idx]
+            )
+        elif valid_idx.size == 1:
+            elevation_arr[nan_mask] = elevation_arr[valid_idx[0]]
+        else:
+            elevation_arr[:] = 0.0
+
+    # Anchor start/end to direct lookups to keep net elevation consistent for
+    # routes that share the same OD pair.
+    start_lookup = _lookup_single_elevation(float(lat[0]), float(lon[0]))
+    end_lookup = _lookup_single_elevation(float(lat[-1]), float(lon[-1]))
+    if start_lookup is not None:
+        elevation_arr[0] = start_lookup
+    if end_lookup is not None:
+        elevation_arr[-1] = end_lookup
+
+    return elevation_arr
 
 
 # ==============================================================
