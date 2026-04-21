@@ -374,44 +374,31 @@ def save_net_elevation_plot(
             label="Energy-time optimised route",
         )
 
-    if baseline_lat.size:
-        ax_map.scatter(
-            baseline_lon[0],
-            baseline_lat[0],
-            color="#1f77b4",
-            marker="o",
-            s=80,
-            edgecolors="black",
-            linewidths=0.8,
-        )
-        ax_map.scatter(
-            baseline_lon[-1],
-            baseline_lat[-1],
-            color="#1f77b4",
-            marker="*",
-            s=160,
-            edgecolors="black",
-            linewidths=0.8,
-        )
-    if optimized_lat.size:
-        ax_map.scatter(
-            optimized_lon[0],
-            optimized_lat[0],
-            color="#2ca02c",
-            marker="o",
-            s=80,
-            edgecolors="black",
-            linewidths=0.8,
-        )
-        ax_map.scatter(
-            optimized_lon[-1],
-            optimized_lat[-1],
-            color="#2ca02c",
-            marker="*",
-            s=160,
-            edgecolors="black",
-            linewidths=0.8,
-        )
+    # Plot shared OD markers once to avoid visual drift from route node snapping.
+    start_lat, start_lon = DEFAULT_ROUTE_ORIGIN
+    end_lat, end_lon = DEFAULT_ROUTE_DESTINATION
+    ax_map.scatter(
+        start_lon,
+        start_lat,
+        color="#111111",
+        marker="o",
+        s=90,
+        edgecolors="white",
+        linewidths=1.0,
+        label="Shared start",
+        zorder=8,
+    )
+    ax_map.scatter(
+        end_lon,
+        end_lat,
+        color="#111111",
+        marker="*",
+        s=170,
+        edgecolors="white",
+        linewidths=1.0,
+        label="Shared destination",
+        zorder=8,
+    )
 
     ax_map.set_xlabel("Longitude")
     ax_map.set_ylabel("Latitude")
