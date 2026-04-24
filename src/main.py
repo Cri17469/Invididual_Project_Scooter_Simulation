@@ -524,13 +524,16 @@ def save_net_elevation_plot(
 
     ax.axvspan(baseline_key[0], baseline_key[1], color="#1f77b4", alpha=0.1)
     ax.axvspan(optimized_key[0], optimized_key[1], color="#2ca02c", alpha=0.1)
+    high_gradient_y = float(np.max(baseline_elevation_m)) if baseline_elevation_m.size else 0.0
     ax.annotate(
         "High gradient segment avoided",
-        xy=(baseline_key[0], np.max(baseline_elevation_m) if baseline_elevation_m.size else 0.0),
-        xytext=(baseline_key[0] + 0.2, (np.max(baseline_elevation_m) if baseline_elevation_m.size else 0.0) + 5.0),
+        xy=(baseline_key[0], high_gradient_y),
+        xytext=(20, 26),
+        textcoords="offset points",
         arrowprops={"arrowstyle": "->", "color": "#333333", "lw": 1.2},
         fontsize=10,
         color="#222222",
+        annotation_clip = True,
     )
 
     for distance, elevation, color, label in (
