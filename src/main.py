@@ -528,12 +528,14 @@ def save_net_elevation_plot(
     ax.annotate(
         "High gradient segment avoided",
         xy=(baseline_key[0], high_gradient_y),
-        xytext=(20, 26),
-        textcoords="offset points",
+        xytext=(0.03, 0.08),
+        textcoords="axes fraction",
         arrowprops={"arrowstyle": "->", "color": "#333333", "lw": 1.2},
         fontsize=10,
         color="#222222",
-        annotation_clip = True,
+        annotation_clip=True,
+        ha="left",
+        va="bottom",
     )
 
     for distance, elevation, color, label in (
