@@ -21,6 +21,7 @@ DEFAULT_RUNS = 30
 OUTPUT_FILENAME = "paired_differences.yaml"
 VELOCITY_PLOT_FILENAME = "velocity.jpg"
 ELEVATION_PLOT_FILENAME = "baseline_vs_optimized_route_comparison.jpg"
+BATTERY_VOLTAGE_PLOT_FILENAME = "battery_voltage_comparison.jpg"
 
 
 def resolve_cycle_filenames(
@@ -158,6 +159,40 @@ def save_velocity_plot(
     plt.savefig(output_path, dpi=200)
     plt.close()
 
+    return output_path
+
+
+def save_battery_voltage_plot(
+    baseline_cycle: dict,
+    optimized_cycle: dict,
+    params,
+    output_filename: str = BATTERY_VOLTAGE_PLOT_FILENAME,
+) -> Path:
+    """Save battery-voltage traces (approximated from SoC and nominal voltage) for both routes."""
+    baseline_result = simulate_energy(baseline_cycle, params, plot=False)
+    optimized_result = simulate_energy(optimized_cycle, params, plot=False)
+
+    baseline_time_s = np.asarray(baseline_cycle["t"], dtype=float)
+    optimized_time_s = np.asarray(optimized_cycle["t"], dtype=float)
+    baseline_soc = np.asarray(baseline_result["SoC_trace"], dtype=float)
+    optimized_soc = np.asarray(optimized_result["SoC_trace"], dtype=float)
+
+    baseline_voltage_v = params.V_nom * baseline_soc
+    optimized_voltage_v = params.V_nom * optimized_soc
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(baseline_time_s, baseline_voltage_v, label="Baseline route", linewidth=2)
+    plt.plot(optimized_time_s, optimized_voltage_v, label="Optimized route", linewidth=2, alpha=0.9)
+    plt.xlabel("Time (s)")
+    plt.ylabel("Estimated battery voltage (V)")
+    plt.title("Battery voltage comparison")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+
+    output_path = get_data_dir() / output_filename
+    plt.savefig(output_path, dpi=200)
+    plt.close()
     return output_path
 
 
@@ -628,11 +663,17 @@ def main(
         optimized_cycle=optimized_cycle,
         params=params,
     )
+    battery_voltage_plot_path = save_battery_voltage_plot(
+        baseline_cycle=baseline_cycle,
+        optimized_cycle=optimized_cycle,
+        params=params,
+    )
 
     print(f"Completed {runs} paired simulations for location '{location}'.")
     print(f"Saved paired differences -> {output_path}")
     print(f"Saved velocity comparison plot -> {velocity_plot_path}")
     print(f"Saved net elevation comparison plot -> {elevation_plot_path}")
+    print(f"Saved battery voltage comparison plot -> {battery_voltage_plot_path}")
 
 
 if __name__ == "__main__":
