@@ -168,7 +168,7 @@ def save_battery_voltage_plot(
     params,
     output_filename: str = BATTERY_VOLTAGE_PLOT_FILENAME,
 ) -> Path:
-    """Save battery-voltage traces (approximated from SoC and nominal voltage) for both routes."""
+    """Save internal-voltage traces and highlight regenerative intervals."""
     baseline_result = simulate_energy(baseline_cycle, params, plot=False)
     optimized_result = simulate_energy(optimized_cycle, params, plot=False)
 
@@ -176,23 +176,72 @@ def save_battery_voltage_plot(
     optimized_time_s = np.asarray(optimized_cycle["t"], dtype=float)
     baseline_soc = np.asarray(baseline_result["SoC_trace"], dtype=float)
     optimized_soc = np.asarray(optimized_result["SoC_trace"], dtype=float)
+    baseline_p_bat_w = np.asarray(baseline_result["P_bat_W_trace"], dtype=float)
+    optimized_p_bat_w = np.asarray(optimized_result["P_bat_W_trace"], dtype=float)
 
-    baseline_voltage_v = params.V_nom * baseline_soc
-    optimized_voltage_v = params.V_nom * optimized_soc
+    # Simple terminal-voltage estimate from SoC and battery power:
+    #   V_term ~= OCV(SoC) - I*R_int, I ~= P_bat / OCV
+    r_int_ohm = 0.08
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(baseline_time_s, baseline_voltage_v, label="Baseline route", linewidth=2)
-    plt.plot(optimized_time_s, optimized_voltage_v, label="Optimized route", linewidth=2, alpha=0.9)
-    plt.xlabel("Time (s)")
-    plt.ylabel("Estimated battery voltage (V)")
-    plt.title("Battery voltage comparison")
-    plt.grid(True, alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
+    def estimate_terminal_voltage(soc: np.ndarray, p_bat_w: np.ndarray) -> np.ndarray:
+        ocv_v = params.V_nom * (0.90 + 0.20 * soc)
+        current_a = p_bat_w / np.maximum(ocv_v, 1e-6)
+        return ocv_v - current_a * r_int_ohm
+
+    baseline_voltage_v = estimate_terminal_voltage(baseline_soc, baseline_p_bat_w)
+    optimized_voltage_v = estimate_terminal_voltage(optimized_soc, optimized_p_bat_w)
+
+    fig, (ax_v, ax_p) = plt.subplots(2, 1, figsize=(11, 7), sharex=False)
+
+    ax_v.plot(baseline_time_s, baseline_voltage_v, label="Baseline route", linewidth=2)
+    ax_v.plot(optimized_time_s, optimized_voltage_v, label="Optimized route", linewidth=2, alpha=0.9)
+    ax_v.set_xlabel("Time (s)")
+    ax_v.set_ylabel("Estimated terminal voltage (V)")
+    ax_v.set_title("Battery internal voltage trace")
+    ax_v.grid(True, alpha=0.3)
+    ax_v.legend()
+
+    ax_p.plot(baseline_time_s, baseline_p_bat_w / 1000.0, label="Baseline battery power", linewidth=1.8)
+    ax_p.plot(
+        optimized_time_s,
+        optimized_p_bat_w / 1000.0,
+        label="Optimized battery power",
+        linewidth=1.8,
+        alpha=0.9,
+    )
+    ax_p.axhline(0.0, color="black", linewidth=1.2, linestyle="--")
+
+    baseline_regen_mask = baseline_p_bat_w < 0.0
+    optimized_regen_mask = optimized_p_bat_w < 0.0
+    ax_p.fill_between(
+        baseline_time_s,
+        baseline_p_bat_w / 1000.0,
+        0.0,
+        where=baseline_regen_mask,
+        color="tab:orange",
+        alpha=0.25,
+        label="Baseline regen (P_bat < 0)",
+    )
+    ax_p.fill_between(
+        optimized_time_s,
+        optimized_p_bat_w / 1000.0,
+        0.0,
+        where=optimized_regen_mask,
+        color="tab:green",
+        alpha=0.20,
+        label="Optimized regen (P_bat < 0)",
+    )
+    ax_p.set_xlabel("Time (s)")
+    ax_p.set_ylabel("Battery power (kW)")
+    ax_p.set_title("Battery power with regen highlighted below zero")
+    ax_p.grid(True, alpha=0.3)
+    ax_p.legend(loc="best")
+
+    fig.tight_layout()
 
     output_path = get_data_dir() / output_filename
-    plt.savefig(output_path, dpi=200)
-    plt.close()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
     return output_path
 
 

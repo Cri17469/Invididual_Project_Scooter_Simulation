@@ -153,6 +153,7 @@ def simulate_energy(cycle: dict, params: VehicleParams, plot: bool = False) -> d
         "regen_peak_power_W": regen_peak_power_W,
         "SoC_trace": SoC.tolist(),
         "final_SoC": final_soc,
+        "P_bat_W_trace": P_bat.tolist(),
         "component_energy_Wh": component_energy_Wh,
         "grade_work_Wh": grade_work_Wh,
         "grade_assist_Wh": grade_assist_Wh,
